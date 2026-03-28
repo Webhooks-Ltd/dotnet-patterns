@@ -9,3 +9,4 @@ System-level patterns that define how deployable units are organised, how they c
 | [`TOP001`](TOP001%20-%20monolith.md) | Monolith | Single deployable — the default topology for most projects |
 | [`TOP002`](TOP002%20-%20service-oriented-architecture.md) | Service-Oriented Architecture | Few coarse-grained services, shared contracts, enterprise-scale integration |
 | [`TOP003`](TOP003%20-%20microservices.md) | Microservices | Many fine-grained independently deployable services, own databases, async messaging |
+| [`TOP004`](TOP004%20-%20serverless.md) | Serverless | Functions triggered by events, platform-managed scaling, no long-running processes |

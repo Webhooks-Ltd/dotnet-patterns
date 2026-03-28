@@ -21,16 +21,7 @@ Every application starts as a monolith. The question is not "should we use a mon
 
 ## What Goes Inside
 
-The monolith's internal structure is defined by a structural pattern:
-
-| Complexity | Structural pattern |
-|:-----------|:-------------------|
-| Low (CRUD) | [STR001](../structural/STR001%20-%20n-tier.md) N-Tier or [STR009](../structural/STR009%20-%20minimal-api.md) Minimal API |
-| Medium | [STR002](../structural/STR002%20-%20clean-architecture-lite.md) Clean Lite or [STR004](../structural/STR004%20-%20vertical-slice.md) Vertical Slice |
-| High | [STR003](../structural/STR003%20-%20full-clean-architecture.md) Full Clean, [STR008](../structural/STR008%20-%20clean-vertical-slice.md) Clean + Features, or [STR006](../structural/STR006%20-%20hexagonal.md) Hexagonal |
-| Multiple bounded contexts | [STR005](../structural/STR005%20-%20modular-monolith.md) Modular Monolith |
-
-A modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) is still a monolith — one deployable. The "modular" part is about internal code boundaries, not deployment topology.
+The monolith's internal structure is defined by a [structural pattern](../structural/). Use the structural decision matrix to pick one based on team size and domain complexity.
 
 ## Deployment
 
@@ -51,7 +42,7 @@ A modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) is
 
 ## Common Mistakes
 
-1. **Calling it a "legacy" pattern.** Monoliths are not legacy. A well-structured monolith is the correct architecture for most applications. The industry's bias toward distributed systems has produced countless over-engineered microservices that would be better served by a single deployable.
+1. **Calling it a "legacy" pattern.** A monolith is a legitimate topology, not something you've failed to grow out of. Plenty of systems that moved to distributed architectures would have been better served by a well-structured single deployable.
 
 2. **No internal boundaries.** A monolith without module or layer boundaries becomes a big ball of mud. Use a structural pattern to maintain internal organisation. [STR005](../structural/STR005%20-%20modular-monolith.md) (Modular Monolith) is the strongest option for systems that might eventually need to extract services.
 
