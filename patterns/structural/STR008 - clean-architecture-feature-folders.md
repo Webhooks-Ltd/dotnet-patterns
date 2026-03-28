@@ -2,24 +2,23 @@
 
 > **Ref:** `STR008` | **Category:** Structural
 
-Multi-project Clean Architecture with CQRS, where the Application layer co-locates each command/query record with its handler in a single file — reducing the per-operation folder and file ceremony of [STR003](STR003%20-%20full-clean-architecture.md) while keeping identical project separation and dependency rules.
+Multi-project Clean Architecture with CQRS, where the Application layer groups operations directly under feature folders — removing the `Commands/` and `Queries/` intermediate layer from [STR003](STR003%20-%20full-clean-architecture.md) while keeping folder-per-operation, separate files, and identical project separation.
 
 ## When to Use
 
 - **3–8 developers** building a domain-rich application where you want compiler-enforced layer boundaries
-- You like [STR003](STR003%20-%20full-clean-architecture.md)'s project separation and CQRS but find the per-operation subfolders verbose — `Orders/Commands/CreateOrder/CreateOrderCommand.cs`, `Orders/Commands/CreateOrder/CreateOrderCommandHandler.cs`, `Orders/Commands/CreateOrder/CreateOrderCommandValidator.cs` for a single operation is a lot of ceremony
-- Features are the natural unit of work — when a developer picks up "order cancellation," they want one file with the command and its handler, not three files in a dedicated subfolder
-- 20+ endpoints where STR003's one-subfolder-per-operation approach creates deeply nested structures that are hard to scan
+- You like [STR003](STR003%20-%20full-clean-architecture.md)'s project separation and CQRS but find the `Commands/` and `Queries/` intermediate folders add depth without value — `Orders/Commands/CreateOrder/` is three levels deep before you reach a file
+- Features are the natural unit of work — when a developer picks up "order cancellation," they want to look in `Orders/CancelOrder/`, not navigate `Orders/Commands/CancelOrder/`
+- 20+ endpoints where the extra nesting in STR003 makes the tree harder to scan
 
-This is [STR003](STR003%20-%20full-clean-architecture.md) with two changes in the Application project: (1) commands/queries don't get their own subfolders — the record and handler live in one file, and (2) the `Command`/`Query` suffix is dropped from type names in favour of verb-noun (`CreateOrder` not `CreateOrderCommand`). Domain, Infrastructure, and Web are identical.
+This is [STR003](STR003%20-%20full-clean-architecture.md) with one change in the Application project: operations sit directly under the feature folder instead of under `Commands/` or `Queries/` subfolders. Same folder-per-operation, same separate files, same suffixes. Domain, Infrastructure, and Web are identical.
 
 ## When NOT to Use
 
 - Pure CRUD — use [STR001](STR001%20-%20n-tier.md), you don't need four projects
-- Small number of endpoints (under ~15) — STR003's per-operation subfolders are fine at that scale and give you more explicit structure
+- Small number of endpoints (under ~15) — [STR003](STR003%20-%20full-clean-architecture.md)'s structure is fine at that scale
 - You want full vertical slices where each feature owns its own data access — use [STR004](STR004%20-%20vertical-slice.md) instead
 - Single-project is sufficient — use [STR002](STR002%20-%20clean-architecture-lite.md)
-- Your team finds nested classes confusing or your mediator library doesn't discover nested handler types — stick with [STR003](STR003%20-%20full-clean-architecture.md)
 
 ## Solution Structure
 
@@ -68,26 +67,31 @@ MyApp/
 │   │   │       └── PagedResult.cs
 │   │   │
 │   │   ├── Orders/                           ← FEATURE FOLDER
-│   │   │   ├── Commands/
-│   │   │   │   ├── CreateOrder.cs
-│   │   │   │   ├── CreateOrderValidator.cs
-│   │   │   │   ├── CancelOrder.cs
-│   │   │   │   └── CancelOrderValidator.cs
-│   │   │   ├── Queries/
-│   │   │   │   ├── GetOrderById.cs
-│   │   │   │   └── ListOrders.cs
-│   │   │   ├── EventHandlers/
-│   │   │   │   └── OrderPlacedEventHandler.cs
-│   │   │   └── DTOs/
-│   │   │       ├── OrderDto.cs
-│   │   │       └── OrderSummaryDto.cs
+│   │   │   ├── CreateOrder/
+│   │   │   │   ├── CreateOrderCommand.cs
+│   │   │   │   ├── CreateOrderCommandHandler.cs
+│   │   │   │   └── CreateOrderCommandValidator.cs
+│   │   │   ├── CancelOrder/
+│   │   │   │   ├── CancelOrderCommand.cs
+│   │   │   │   └── CancelOrderCommandHandler.cs
+│   │   │   ├── GetOrderById/
+│   │   │   │   ├── GetOrderByIdQuery.cs
+│   │   │   │   ├── GetOrderByIdQueryHandler.cs
+│   │   │   │   └── OrderDto.cs
+│   │   │   ├── ListOrders/
+│   │   │   │   ├── ListOrdersQuery.cs
+│   │   │   │   ├── ListOrdersQueryHandler.cs
+│   │   │   │   └── OrderSummaryDto.cs
+│   │   │   └── EventHandlers/
+│   │   │       └── OrderPlacedEventHandler.cs
 │   │   │
 │   │   └── Products/                         ← FEATURE FOLDER
-│   │       ├── Queries/
-│   │       │   ├── GetProductById.cs
-│   │       │   └── ListProducts.cs
-│   │       └── DTOs/
-│   │           └── ProductDto.cs
+│   │       ├── GetProductById/
+│   │       │   ├── GetProductByIdQuery.cs
+│   │       │   └── GetProductByIdQueryHandler.cs
+│   │       └── ListProducts/
+│   │           ├── ListProductsQuery.cs
+│   │           └── ListProductsQueryHandler.cs
 │   │
 │   ├── MyApp.Infrastructure/
 │   │   ├── MyApp.Infrastructure.csproj        ← references Application, Domain
@@ -126,16 +130,16 @@ MyApp/
     └── MyApp.Web.Tests/
 ```
 
-**The key difference from [STR003](STR003%20-%20full-clean-architecture.md):** Both patterns group by feature (Orders/, Products/). The difference is what happens inside each feature folder.
+**The key difference from [STR003](STR003%20-%20full-clean-architecture.md):** Both patterns group by feature and use folder-per-operation with separate files. The difference is one level of nesting.
 
-In STR003, each operation gets its own **subfolder** with separate files. Types use explicit `Command`/`Query` suffixes:
+In STR003, operations are grouped under `Commands/` and `Queries/` within each feature:
 
 ```
 Application/Orders/
 ├── Commands/
-│   ├── CreateOrder/                        ← subfolder per operation
-│   │   ├── CreateOrderCommand.cs           ← record in its own file
-│   │   ├── CreateOrderCommandHandler.cs    ← handler in its own file
+│   ├── CreateOrder/
+│   │   ├── CreateOrderCommand.cs
+│   │   ├── CreateOrderCommandHandler.cs
 │   │   └── CreateOrderCommandValidator.cs
 │   └── CancelOrder/
 │       ├── CancelOrderCommand.cs
@@ -144,33 +148,31 @@ Application/Orders/
 │   └── GetOrderById/
 │       ├── GetOrderByIdQuery.cs
 │       ├── GetOrderByIdQueryHandler.cs
-│       └── OrderDto.cs                     ← DTO co-located with its query
+│       └── OrderDto.cs
 └── EventHandlers/
     └── OrderPlacedEventHandler.cs
 ```
 
-In STR008, operations are **single files** with the handler nested inside. Suffixes are dropped. DTOs get their own subfolder per feature:
+In STR008, operations sit directly under the feature — no `Commands/` or `Queries/` intermediate layer:
 
 ```
 Application/Orders/
-├── Commands/
-│   ├── CreateOrder.cs              ← record + nested handler in one file
-│   ├── CreateOrderValidator.cs
-│   ├── CancelOrder.cs
-│   └── CancelOrderValidator.cs
-├── Queries/
-│   ├── GetOrderById.cs             ← record + nested handler in one file
-│   └── ListOrders.cs
-├── EventHandlers/
-│   └── OrderPlacedEventHandler.cs
-└── DTOs/
-    ├── OrderDto.cs                 ← shared across all queries in this feature
-    └── OrderSummaryDto.cs
+├── CreateOrder/
+│   ├── CreateOrderCommand.cs
+│   ├── CreateOrderCommandHandler.cs
+│   └── CreateOrderCommandValidator.cs
+├── CancelOrder/
+│   ├── CancelOrderCommand.cs
+│   └── CancelOrderCommandHandler.cs
+├── GetOrderById/
+│   ├── GetOrderByIdQuery.cs
+│   ├── GetOrderByIdQueryHandler.cs
+│   └── OrderDto.cs
+└── EventHandlers/
+    └── OrderPlacedEventHandler.cs
 ```
 
-Two concrete changes:
-1. **One file per operation.** The command/query record and its handler live in the **same file** as a nested class. No `CreateOrderCommand.cs` + `CreateOrderCommandHandler.cs` — just `CreateOrder.cs`. Validators stay in a separate file because they can grow large.
-2. **No `Command`/`Query` suffix.** Types are named `CreateOrder` not `CreateOrderCommand`, `GetOrderById` not `GetOrderByIdQuery`. The folder they're in (`Commands/` or `Queries/`) provides that context.
+One change: the `Commands/` and `Queries/` folders are removed. The `Command`/`Query` suffix on the type names already tells you what it is. Everything else — separate files, folder-per-operation, suffixes — stays the same as STR003.
 
 ## Dependency Rules
 
@@ -204,17 +206,17 @@ The compiler enforces the hard boundaries (`Application` → `Domain` only, no r
 | Repository Interface | `I{Entity}Repository` | Domain/Interfaces | `IOrderRepository` |
 | Repository Impl | `{Entity}Repository` | Infrastructure/Repositories | `OrderRepository` |
 | Feature folder | plural noun | Application/ | `Orders/`, `Products/` |
-| Command | `{Verb}{Entity}` | Application/{Feature}/Commands | `CreateOrder` |
-| Command handler | nested inside command | same file | `CreateOrder.Handler` |
-| Command validator | `{Verb}{Entity}Validator` | Application/{Feature}/Commands | `CreateOrderValidator` |
-| Query | `{Verb}{Entity}` | Application/{Feature}/Queries | `GetOrderById` |
-| Query handler | nested inside query | same file | `GetOrderById.Handler` |
-| Application DTO | `{Entity}Dto` | Application/{Feature}/DTOs | `OrderDto` |
+| Command | `{Verb}{Entity}Command` | Application/{Feature}/{Operation}/ | `CreateOrderCommand` |
+| Command handler | `{Verb}{Entity}CommandHandler` | Application/{Feature}/{Operation}/ | `CreateOrderCommandHandler` |
+| Command validator | `{Verb}{Entity}CommandValidator` | Application/{Feature}/{Operation}/ | `CreateOrderCommandValidator` |
+| Query | `{Verb}{Entity}Query` | Application/{Feature}/{Operation}/ | `GetOrderByIdQuery` |
+| Query handler | `{Verb}{Entity}QueryHandler` | Application/{Feature}/{Operation}/ | `GetOrderByIdQueryHandler` |
+| Application DTO | `{Entity}Dto` | Application/{Feature}/{Operation}/ | `OrderDto` |
 | API Request DTO | `{Verb}{Entity}Request` | Web/DTOs | `CreateOrderRequest` |
 | API Response DTO | `{Entity}Response` | Web/DTOs | `OrderResponse` |
 | Event Handler | `{EventName}Handler` | Application/{Feature}/EventHandlers | `OrderPlacedEventHandler` |
 
-Each command/query file contains both the record and its handler as a nested class. This is the core ergonomic improvement over [STR003](STR003%20-%20full-clean-architecture.md).
+Same naming conventions as [STR003](STR003%20-%20full-clean-architecture.md). The only difference is folder depth — operations sit under the feature, not under `Commands/` or `Queries/`.
 
 ## Key Abstractions
 
@@ -264,49 +266,49 @@ public class Order
 }
 ```
 
-Command with nested handler — the defining file pattern of this architecture. Define `ICommand<T>` / `ICommandHandler` in `Application/Common/Interfaces/`, or use the interfaces from your chosen mediator library (MediatR, Wolverine, Mediator, etc.):
+Command and handler — identical to [STR003](STR003%20-%20full-clean-architecture.md), just in a flatter folder. Define `ICommand<T>` / `ICommandHandler` in `Application/Common/Interfaces/`, or use the interfaces from your chosen mediator library:
 
 ```csharp
-// Application/Orders/Commands/CreateOrder.cs
-public sealed record CreateOrder(
+// Application/Orders/CreateOrder/CreateOrderCommand.cs
+public sealed record CreateOrderCommand(
     string Street, string City, string PostCode,
-    IReadOnlyList<CreateOrder.LineItem> Items) : ICommand<Guid>
+    IReadOnlyList<CreateOrderLineItem> Items) : ICommand<Guid>;
+
+public sealed record CreateOrderLineItem(Guid ProductId, int Quantity);
+```
+
+```csharp
+// Application/Orders/CreateOrder/CreateOrderCommandHandler.cs
+public sealed class CreateOrderCommandHandler(
+    IOrderRepository orders,
+    IProductRepository products) : ICommandHandler<CreateOrderCommand, Guid>
 {
-    public sealed record LineItem(Guid ProductId, int Quantity);
-
-    internal sealed class Handler(
-        IOrderRepository orders,
-        IProductRepository products) : ICommandHandler<CreateOrder, Guid>
+    public async Task<Guid> HandleAsync(CreateOrderCommand command, CancellationToken ct)
     {
-        public async Task<Guid> HandleAsync(CreateOrder command, CancellationToken ct)
+        var address = new Address(command.Street, command.City, command.PostCode);
+        var order = new Order(address);
+
+        foreach (var item in command.Items)
         {
-            var address = new Address(command.Street, command.City, command.PostCode);
-            var order = new Order(address);
-
-            foreach (var item in command.Items)
-            {
-                var product = await products.GetByIdAsync(item.ProductId, ct)
-                    ?? throw new NotFoundException(nameof(Product), item.ProductId);
-                order.AddItem(product, item.Quantity);
-            }
-
-            order.Submit();
-            await orders.AddAsync(order, ct);
-            await orders.SaveChangesAsync(ct);
-
-            return order.Id;
+            var product = await products.GetByIdAsync(item.ProductId, ct)
+                ?? throw new NotFoundException(nameof(Product), item.ProductId);
+            order.AddItem(product, item.Quantity);
         }
+
+        order.Submit();
+        await orders.AddAsync(order, ct);
+        await orders.SaveChangesAsync(ct);
+
+        return order.Id;
     }
 }
 ```
 
-Validator in a separate file:
-
 ```csharp
-// Application/Orders/Commands/CreateOrderValidator.cs
-public sealed class CreateOrderValidator : AbstractValidator<CreateOrder>
+// Application/Orders/CreateOrder/CreateOrderCommandValidator.cs
+public sealed class CreateOrderCommandValidator : AbstractValidator<CreateOrderCommand>
 {
-    public CreateOrderValidator()
+    public CreateOrderCommandValidator()
     {
         RuleFor(x => x.Items).NotEmpty();
         RuleFor(x => x.Street).NotEmpty();
@@ -321,30 +323,36 @@ public sealed class CreateOrderValidator : AbstractValidator<CreateOrder>
 }
 ```
 
-Query with nested handler:
+Query, handler, and DTO co-located in the same operation folder:
 
 ```csharp
-// Application/Orders/Queries/GetOrderById.cs
-public sealed record GetOrderById(Guid OrderId) : IQuery<OrderDto?>
+// Application/Orders/GetOrderById/GetOrderByIdQuery.cs
+public sealed record GetOrderByIdQuery(Guid OrderId) : IQuery<OrderDto?>;
+
+// Application/Orders/GetOrderById/GetOrderByIdQueryHandler.cs
+public sealed class GetOrderByIdQueryHandler(
+    IOrderRepository orders) : IQueryHandler<GetOrderByIdQuery, OrderDto?>
 {
-    internal sealed class Handler(
-        IOrderRepository orders) : IQueryHandler<GetOrderById, OrderDto?>
+    public async Task<OrderDto?> HandleAsync(GetOrderByIdQuery query, CancellationToken ct)
     {
-        public async Task<OrderDto?> HandleAsync(GetOrderById query, CancellationToken ct)
-        {
-            var order = await orders.GetByIdAsync(query.OrderId, ct);
-            return order is null ? null : new OrderDto(
-                order.Id,
-                order.Status,
-                order.Total.Amount,
-                order.Items.Select(i => new OrderDto.LineItemDto(
-                    i.ProductId, i.Quantity, i.LineTotal.Amount)).ToList());
-        }
+        var order = await orders.GetByIdAsync(query.OrderId, ct);
+        return order is null ? null : new OrderDto(
+            order.Id,
+            order.Status,
+            order.Total.Amount,
+            order.Items.Select(i => new OrderLineItemDto(
+                i.ProductId, i.Quantity, i.LineTotal.Amount)).ToList());
     }
 }
+
+// Application/Orders/GetOrderById/OrderDto.cs
+public sealed record OrderDto(Guid Id, OrderStatus Status, decimal Total,
+    IReadOnlyList<OrderLineItemDto> Items);
+
+public sealed record OrderLineItemDto(Guid ProductId, int Quantity, decimal LineTotal);
 ```
 
-DI registration. The nested handler classes are discovered by assembly scanning — the mediator library finds them the same way it would find top-level handlers:
+DI registration — standard assembly scanning:
 
 ```csharp
 // Application/DependencyInjection.cs
@@ -353,10 +361,8 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         var assembly = typeof(DependencyInjection).Assembly;
-
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssembly(assembly));
+        services.AddMediator(assembly);
         services.AddValidatorsFromAssembly(assembly);
-
         return services;
     }
 }
@@ -366,8 +372,6 @@ builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
 ```
-
-If using a source-generated mediator (Mediator, Wolverine), registration looks different but the principle is the same — scan the Application assembly. Nested handler classes are regular types; assembly scanning finds them.
 
 ## Data Flow
 
@@ -380,13 +384,13 @@ HTTP Request
 OrdersController.Create(CreateOrderRequest dto)
     │  maps API DTO → CreateOrder command
     ▼
-Mediator dispatches CreateOrder
+Mediator dispatches CreateOrderCommand
     │
     ▼
-ValidationBehaviour<CreateOrder>
-    │  runs CreateOrderValidator
+ValidationBehaviour<CreateOrderCommand>
+    │  runs CreateOrderCommandValidator
     ▼
-CreateOrder.Handler.HandleAsync()
+CreateOrderCommandHandler.HandleAsync()
     │  loads Product entities via IProductRepository
     │  creates Order entity, calls order.AddItem(), order.Submit()
     │  persists via IOrderRepository
@@ -413,10 +417,10 @@ HTTP Request
 OrdersController.GetById(Guid id)
     │  creates GetOrderById query
     ▼
-Mediator dispatches GetOrderById
+Mediator dispatches GetOrderByIdQuery
     │
     ▼
-GetOrderById.Handler.HandleAsync()
+GetOrderByIdQueryHandler.HandleAsync()
     │  queries via IOrderRepository
     │  maps to OrderDto
     ▼
@@ -448,11 +452,11 @@ tests/
 ├── MyApp.Application.Tests/
 │   ├── MyApp.Application.Tests.csproj     ← references Application, Domain
 │   └── Orders/                            ← mirrors feature folder structure
-│       ├── Commands/
-│       │   ├── CreateOrderTests.cs
-│       │   └── CreateOrderValidatorTests.cs
-│       └── Queries/
-│           └── GetOrderByIdTests.cs
+│       ├── CreateOrder/
+│       │   ├── CreateOrderCommandHandlerTests.cs
+│       │   └── CreateOrderCommandValidatorTests.cs
+│       └── GetOrderById/
+│           └── GetOrderByIdQueryHandlerTests.cs
 │
 ├── MyApp.Infrastructure.Tests/
 │   ├── MyApp.Infrastructure.Tests.csproj
@@ -467,22 +471,22 @@ tests/
         └── ProductsEndpointTests.cs
 ```
 
-Test projects mirror the source structure. Application tests follow the feature folder layout — `Orders/Commands/CreateOrderTests.cs` maps to `Orders/Commands/CreateOrder.cs`.
+Test projects mirror the source structure. Application tests follow the feature folder layout — `Orders/CreateOrder/CreateOrderCommandHandlerTests.cs` maps to `Orders/CreateOrder/CreateOrderCommandHandler.cs`.
 
 **Domain.Tests** — pure unit tests. No mocks, no database. Test entity invariants and value object behaviour.
 
-**Application.Tests** — handler tests with mocked repositories. Verify orchestration, not business rules (those are covered by Domain.Tests). Validator tests with known inputs. Requires `[assembly: InternalsVisibleTo("MyApp.Application.Tests")]` in the Application project since handlers are `internal`.
+**Application.Tests** — handler tests with mocked repositories. Verify orchestration, not business rules (those are covered by Domain.Tests). Validator tests with known inputs.
 
 ```csharp
-public sealed class CreateOrderTests
+public sealed class CreateOrderCommandHandlerTests
 {
     private readonly IOrderRepository _orders = Substitute.For<IOrderRepository>();
     private readonly IProductRepository _products = Substitute.For<IProductRepository>();
-    private readonly CreateOrder.Handler _sut;
+    private readonly CreateOrderCommandHandler _sut;
 
-    public CreateOrderTests()
+    public CreateOrderCommandHandlerTests()
     {
-        _sut = new CreateOrder.Handler(_orders, _products);
+        _sut = new CreateOrderCommandHandler(_orders, _products);
     }
 
     [Fact]
@@ -492,8 +496,8 @@ public sealed class CreateOrderTests
         _products.GetByIdAsync(product.Id, Arg.Any<CancellationToken>())
             .Returns(product);
 
-        var command = new CreateOrder("1 Main St", "London", "SW1A",
-            [new CreateOrder.LineItem(product.Id, 2)]);
+        var command = new CreateOrderCommand("1 Main St", "London", "SW1A",
+            [new CreateOrderLineItem(product.Id, 2)]);
 
         var orderId = await _sut.HandleAsync(command, CancellationToken.None);
 
@@ -511,25 +515,23 @@ public sealed class CreateOrderTests
 
 ## Common Mistakes
 
-1. **Splitting command and handler into separate files.** The whole point of this pattern is co-location. `CreateOrder` (record) and `CreateOrder.Handler` (nested class) live in one file. If you separate them, you've just recreated [STR003](STR003%20-%20full-clean-architecture.md) with different folder names.
+1. **Re-adding `Commands/` and `Queries/` folders.** The whole point is that operations sit directly under the feature. `Orders/CreateOrder/` not `Orders/Commands/CreateOrder/`. The `Command`/`Query` suffix on the type name already provides that context.
 
-2. **Business logic in handlers.** Feature folders don't change where logic lives. The handler still just orchestrates — business rules still belong in Domain entities. Don't let the feature-folder ergonomics tempt you into putting logic in the handler "because it's right there."
+2. **Business logic in handlers.** Feature folders don't change where logic lives. The handler still just orchestrates — business rules still belong in Domain entities.
 
-3. **Feature folders referencing each other's DTOs.** `Orders/Commands/CreateOrder.Handler` imports a DTO from `Products/DTOs/ProductDto.cs`. Feature folders within Application should be independent. If a handler needs product data, it uses `IProductRepository` from Domain, not another feature's DTO. Cross-feature DTOs that genuinely need sharing (pagination, sorting) belong in `Common/`.
+3. **Feature folders referencing each other's DTOs.** `CreateOrderCommandHandler` imports a DTO from `Products/`. Feature folders within Application should be independent. If a handler needs product data, it uses `IProductRepository` from Domain, not another feature's DTO. Cross-feature types that genuinely need sharing (pagination, sorting) belong in `Common/`.
 
-4. **Mixing feature-folder and layer-first organisation.** Some features use `Orders/Commands/CreateOrder.cs`, others put everything in `Payments/CreatePaymentCommand.cs` without the Commands/Queries subfolder. Pick one structure and apply it consistently across all features.
+4. **Inconsistent structure across features.** Some features use folder-per-operation, others dump everything in the feature root. Pick one structure and apply it consistently.
 
-5. **Forgetting DTOs are per-feature.** `OrderDto` lives in `Orders/DTOs/`, not in a shared `Common/DTOs/` folder. Each feature defines the shape it needs. If two features need different views of an order, they each define their own DTO.
+5. **DTOs in a shared folder.** `OrderDto` lives in the operation folder that produces it (`GetOrderById/OrderDto.cs`), not in a shared `DTOs/` folder. Each operation defines the shape it needs. If two operations return different views of an order, they each define their own DTO.
 
-6. **Validators that enforce business rules.** validators in Application should check structural validity (non-empty, correct format, within range). Business rules ("order cannot exceed credit limit") belong in Domain entities, not validators.
+6. **Validators that enforce business rules.** Validators in Application should check structural validity (non-empty, correct format, within range). Business rules ("order cannot exceed credit limit") belong in Domain entities, not validators.
 
-7. **Giant feature folders.** If `Orders/` has 30+ files, break it into sub-features: `Orders/Placement/`, `Orders/Fulfilment/`, `Orders/Returns/`. The feature folder should be scannable at a glance.
+7. **Giant feature folders.** If `Orders/` has 30+ operation folders, break it into sub-features: `Orders/Placement/`, `Orders/Fulfilment/`, `Orders/Returns/`.
 
-8. **Web controllers organised differently from Application features.** If Application has `Orders/`, `Products/`, `Shipping/`, the Web controllers should mirror that grouping. `OrdersController` maps to the `Orders/` feature folder. Don't reorganise at the API layer.
+8. **Web controllers organised differently from Application features.** If Application has `Orders/`, `Products/`, `Shipping/`, the Web controllers should mirror that grouping. `OrdersController` maps to the `Orders/` feature folder.
 
-9. **Making the handler `public`.** Handlers should be `internal sealed`. They are implementation details of the feature — only the command/query record is part of the public contract. The mediator dispatches by scanning the assembly, so the handler doesn't need to be public. Use `InternalsVisibleTo` for test projects.
-
-10. **Missing CancellationToken propagation.** Every `async` method in the handler chain should accept and forward a `CancellationToken`. Repository interfaces should include it in their signatures. Dropping the token silently makes the application unresponsive to client disconnects and shutdown signals.
+9. **Missing CancellationToken propagation.** Every `async` method in the handler chain should accept and forward a `CancellationToken`. Repository interfaces should include it in their signatures.
 
 ## Related Packages
 
