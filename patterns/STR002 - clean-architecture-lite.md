@@ -96,10 +96,10 @@ MyApp/
 
 ## Dependency Rules
 
-```
-Api/  →  Application/  →  Domain/
- │            │
- └──→ Infrastructure/ ──→ Domain/
+```mermaid
+graph TD
+    Api --> Application --> Domain
+    Api --> Infrastructure --> Domain
 ```
 
 - **Domain/** references nothing. No `using MyApp.Infrastructure;`, no `using MyApp.Api;`. Ever.

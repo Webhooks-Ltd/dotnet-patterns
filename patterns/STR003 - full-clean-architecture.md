@@ -135,24 +135,13 @@ MyApp/
 
 ## Dependency Rules
 
-```
-                  ┌──────────────┐
-                  │  MyApp.Web   │
-                  └──────┬───────┘
-                         │ references
-            ┌────────────┼────────────┐
-            ▼                         ▼
-┌────────────────────┐   ┌──────────────────────┐
-│ MyApp.Application  │   │ MyApp.Infrastructure │
-└─────────┬──────────┘   └──┬────────────┬──────┘
-          │                 │            │
-          │ references      │ references │ references
-          ▼                 ▼            ▼
-        ┌──────────────────────────────────┐
-        │          MyApp.Domain            │
-        └──────────────────────────────────┘
-
-Infrastructure references BOTH Application and Domain.
+```mermaid
+graph TD
+    Web[MyApp.Web] --> Application[MyApp.Application]
+    Web --> Infrastructure[MyApp.Infrastructure]
+    Application --> Domain[MyApp.Domain]
+    Infrastructure --> Application
+    Infrastructure --> Domain
 ```
 
 **The iron rules:**

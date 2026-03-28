@@ -78,20 +78,10 @@ MyApp/
 
 ## Dependency Rules
 
-```
-┌──────────────┐
-│  MyApp.Web   │
-└──────┬───────┘
-       │ references
-       ▼
-┌──────────────────┐
-│  MyApp.Business  │
-└──────┬───────────┘
-       │ references
-       ▼
-┌──────────────┐
-│  MyApp.Data  │
-└──────────────┘
+```mermaid
+graph TD
+    Web[MyApp.Web] --> Business[MyApp.Business]
+    Business --> Data[MyApp.Data]
 ```
 
 - `Web` references `Business` only. It calls service interfaces and handles HTTP concerns.

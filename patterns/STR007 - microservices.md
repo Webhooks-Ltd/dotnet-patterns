@@ -104,30 +104,20 @@ MyApp/
 
 ## Dependency Rules
 
+```mermaid
+graph TD
+    Orders[Orders Service] <-- HTTP/gRPC --> Inventory[Inventory Service]
+    Orders --> Broker[Message Broker<br/>RabbitMQ / ASB]
+    Inventory --> Broker
+    Payments[Payments Service] --> Broker
+    Notifications[Notifications Service] --> Broker
+    Orders --> Contracts[MyApp.Contracts]
+    Inventory --> Contracts
+    Payments --> Contracts
+    Notifications --> Contracts
 ```
-┌──────────┐   ┌───────────┐   ┌──────────┐   ┌────────────────┐
-│  Orders  │   │ Inventory │   │ Payments │   │ Notifications  │
-│ Service  │   │  Service  │   │ Service  │   │   Service      │
-└────┬─────┘   └─────┬─────┘   └────┬─────┘   └───────┬────────┘
-     │               │              │                  │
-     │  HTTP/gRPC    │              │                  │
-     │◄─────────────►│              │                  │
-     │               │              │                  │
-     └───────────────┴──────────────┴──────────────────┘
-                            │
-                     ┌──────┴──────┐
-                     │ Message     │
-                     │ Broker      │
-                     │(RabbitMQ/   │
-                     │ ASB)        │
-                     └─────────────┘
 
-Each service:
-  ├── owns its own database (or schema)
-  ├── references MyApp.Contracts
-  ├── references MyApp.ServiceDefaults
-  └── NEVER references another service's code
-```
+Each service owns its own database, references `MyApp.Contracts` and `MyApp.ServiceDefaults`, and **NEVER** references another service's code.
 
 **The iron rules:**
 

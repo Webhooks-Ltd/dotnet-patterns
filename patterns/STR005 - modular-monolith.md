@@ -106,26 +106,20 @@ Each **module** is its own class library project. Internally, each module can us
 
 ## Dependency Rules
 
-```
-                    ┌───────────────┐
-                    │  MyApp.Host   │
-                    └───────┬───────┘
-                            │ references all modules
-          ┌─────────────────┼─────────────────┐
-          ▼                 ▼                  ▼
-   ┌─────────────┐  ┌──────────────┐  ┌────────────────┐
-   │   Orders    │  │  Inventory   │  │   Payments     │
-   │   Module    │  │   Module     │  │    Module      │
-   └──────┬──────┘  └──────┬───────┘  └───────┬────────┘
-          │                │                   │
-          ▼                ▼                   ▼
-   ┌─────────────────────────────────────────────────┐
-   │          MyApp.Shared.Contracts                  │
-   └─────────────────────────────────────────────────┘
-
-   Orders ✗──→ Inventory       ← NEVER direct references
-   Orders ✗──→ Payments        ← NEVER direct references
-   Inventory ✗──→ Orders       ← NEVER direct references
+```mermaid
+graph TD
+    Host[MyApp.Host] --> Orders[Orders Module]
+    Host --> Inventory[Inventory Module]
+    Host --> Payments[Payments Module]
+    Orders --> Contracts[MyApp.Shared.Contracts]
+    Inventory --> Contracts
+    Payments --> Contracts
+    Orders -.-x Inventory
+    Orders -.-x Payments
+    Inventory -.-x Orders
+    linkStyle 6 stroke:red
+    linkStyle 7 stroke:red
+    linkStyle 8 stroke:red
 ```
 
 **The iron rules:**

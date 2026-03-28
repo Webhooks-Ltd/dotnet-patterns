@@ -98,21 +98,24 @@ MyApp/
 
 ## Dependency Rules
 
-```
-         DRIVING ADAPTERS              DRIVEN ADAPTERS
-    ┌──────────┐  ┌──────────┐    ┌──────────────┐  ┌─────────────┐
-    │   Web    │  │Messaging │    │ Persistence  │  │  Payment    │
-    │ Adapter  │  │ Adapter  │    │   Adapter    │  │  Adapter    │
-    └────┬─────┘  └────┬─────┘    └──────┬───────┘  └──────┬──────┘
-         │             │                 │                  │
-         │ calls       │ calls           │ implements       │ implements
-         ▼             ▼                 ▼                  ▼
-    ┌─────────────────────────────────────────────────────────────┐
-    │                      MyApp.Domain                           │
-    │                                                             │
-    │  Driving Ports ◄─── Services ───► Driven Ports              │
-    │  (interfaces)        (impl)       (interfaces)              │
-    └─────────────────────────────────────────────────────────────┘
+```mermaid
+graph TD
+    subgraph Driving Adapters
+        Web[Web Adapter]
+        Msg[Messaging Adapter]
+    end
+    subgraph Driven Adapters
+        Persist[Persistence Adapter]
+        Pay[Payment Adapter]
+    end
+    subgraph Domain["MyApp.Domain (the hexagon)"]
+        DP[Driving Ports] <--> Services
+        Services <--> DRP[Driven Ports]
+    end
+    Web -- calls --> DP
+    Msg -- calls --> DP
+    Persist -- implements --> DRP
+    Pay -- implements --> DRP
 ```
 
 **The fundamental rule:** All arrows point inward. The domain references nothing. Everything else references the domain.

@@ -13,7 +13,7 @@ A reference library of solution-level architecture patterns for .NET/C# projects
 | [`STR005`](patterns/STR005%20-%20modular-monolith.md) | Modular Monolith | Independent modules, own data, explicit contracts |
 | [`STR006`](patterns/STR006%20-%20hexagonal.md) | Hexagonal (Ports & Adapters) | Domain at centre, ports define all external interaction |
 | [`STR007`](patterns/STR007%20-%20microservices.md) | Microservices | Independent services, own databases, async messaging |
-| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean Vertical Slice | Single project, domain-protected entities with feature-per-file organisation |
+| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
 
 ## Categories
 
@@ -32,7 +32,7 @@ Use the first row where **all** conditions in the "When" column are true.
 | [`STR005`](patterns/STR005%20-%20modular-monolith.md) | Modular Monolith | 5–20 | High | 1 | Multiple bounded contexts, want service-like autonomy without distributed overhead |
 | [`STR006`](patterns/STR006%20-%20hexagonal.md) | Hexagonal | 3–10 | High | 1+ | Multiple entry points (API, queue, CLI) to the same domain |
 | [`STR007`](patterns/STR007%20-%20microservices.md) | Microservices | 15+ | High | Many | Teams need independent deployment; you've outgrown a monolith |
-| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean Vertical Slice | 2–6 | Medium–High | 1 | Want feature-per-file but domain has invariants worth protecting |
+| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean + Feature Folders | 3–8 | Medium–High | 1+ | Want STR003's rigour but find Commands/Queries split hard to navigate |
 
 ### How to read the matrix
 
@@ -51,14 +51,21 @@ Patterns aren't always exclusive. Some compose well:
 
 ### Progression paths
 
-```
-STR001 ──→ STR002 ──→ STR003
-  │                        │
-  │                        ▼
-  └──→ STR004 ──→ STR005 ──→ STR007
-                      │
-                      ▼
-                   STR006 (per module/service)
+```mermaid
+graph LR
+    STR001 --> STR002 --> STR003
+    STR001 --> STR004
+    STR003 --> STR008
+    STR004 --> STR005 --> STR007
+    STR005 --> STR006
+    click STR001 "patterns/STR001 - n-tier.md"
+    click STR002 "patterns/STR002 - clean-architecture-lite.md"
+    click STR003 "patterns/STR003 - full-clean-architecture.md"
+    click STR004 "patterns/STR004 - vertical-slice.md"
+    click STR005 "patterns/STR005 - modular-monolith.md"
+    click STR006 "patterns/STR006 - hexagonal.md"
+    click STR007 "patterns/STR007 - microservices.md"
+    click STR008 "patterns/STR008 - clean-vertical-slice.md"
 ```
 
 ## Each Pattern Covers

@@ -87,16 +87,16 @@ Each file in `Features/` is a **complete slice** — it contains the request, re
 
 ## Dependency Rules
 
-```
-Feature A ──→ Domain
-Feature A ──→ Database/AppDbContext
-Feature A ──→ Shared/
-
-Feature B ──→ Domain
-Feature B ──→ Database/AppDbContext
-Feature B ──→ Shared/
-
-Feature A ✗──→ Feature B    ← NEVER
+```mermaid
+graph TD
+    A[Feature A] --> Domain
+    A --> Database[Database/AppDbContext]
+    A --> Shared
+    B[Feature B] --> Domain
+    B --> Database
+    B --> Shared
+    A -.-x B
+    linkStyle 6 stroke:red
 ```
 
 - **Features never reference other features.** If `CreateOrder` needs product data, it queries the database directly — it does not call `GetProductById`.

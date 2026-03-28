@@ -1,161 +1,225 @@
-# Clean Vertical Slice
+# Clean Architecture with Feature Folders
 
 > **Ref:** `STR008` | **Category:** Structural
 
-Single-project architecture combining Clean Architecture's dependency inversion and domain protection with Vertical Slice's feature-per-file organisation — layered boundaries enforced by convention, features organised by use case.
+Multi-project Clean Architecture with CQRS, where the Application layer is organised by feature folder instead of by Commands/Queries — each feature groups its commands, queries, handlers, validators, and DTOs together.
 
 ## When to Use
 
-- **2–6 developers** building a feature-rich application with real business rules
-- You want feature-based organisation ([STR004](STR004%20-%20vertical-slice.md)) but your domain model has invariants worth protecting ([STR002](STR002%20-%20clean-architecture-lite.md))
-- Features are mostly independent, but shared domain logic exists and needs a home
-- You're tired of the layered ceremony (five files across five folders to add one endpoint) but still need clear boundaries between domain, application, and infrastructure
-- API-heavy applications with 15–60+ endpoints where pure vertical slices would accumulate duplicated domain logic
+- **3–8 developers** building a domain-rich application where you want compiler-enforced layer boundaries
+- You like [STR003](STR003%20-%20full-clean-architecture.md)'s project separation and CQRS but find navigating `Commands/CreateOrder/`, `Queries/GetOrderById/` across separate folder trees tedious
+- Features are the natural unit of work — when a developer picks up "order cancellation," they want one folder with everything in it
+- 20+ endpoints where the traditional `Commands/` and `Queries/` folders become large flat lists
 
-This pattern gives you the developer experience of vertical slices (one place to look for each feature) with the architectural safety net of Clean Architecture (domain logic is isolated and testable).
+This is [STR003](STR003%20-%20full-clean-architecture.md) with a different folder strategy in the Application project. The Domain, Infrastructure, and Web projects are identical. The only change is how you organise Application.
 
 ## When NOT to Use
 
-- Pure CRUD with no domain logic — use [STR001](STR001%20-%20n-tier.md), the domain layer would be empty ceremony
-- The domain is so complex it needs compiler-enforced boundaries across separate projects — use [STR003](STR003%20-%20full-clean-architecture.md)
-- Features share almost no domain logic — pure [STR004](STR004%20-%20vertical-slice.md) is simpler and you won't benefit from the shared domain layer
-- Large teams (8+) where convention-based boundaries won't hold — use multi-project [STR003](STR003%20-%20full-clean-architecture.md) or [STR005](STR005%20-%20modular-monolith.md)
+- Pure CRUD — use [STR001](STR001%20-%20n-tier.md), you don't need four projects
+- Small number of endpoints (under ~15) — the [STR003](STR003%20-%20full-clean-architecture.md) Commands/Queries split is fine at that scale
+- You want full vertical slices where each feature owns its own data access — use [STR004](STR004%20-%20vertical-slice.md) instead
+- Single-project is sufficient — use [STR002](STR002%20-%20clean-architecture-lite.md)
 
 ## Solution Structure
+
+Domain, Infrastructure, and Web are identical to [STR003](STR003%20-%20full-clean-architecture.md). Only the Application project differs:
 
 ```
 MyApp/
 ├── MyApp.sln
-└── src/
-    └── MyApp/
-        ├── MyApp.csproj
-        ├── Program.cs
-        ├── appsettings.json
-        │
-        ├── Domain/
-        │   ├── Entities/
-        │   │   ├── Order.cs
-        │   │   ├── OrderItem.cs
-        │   │   └── Product.cs
-        │   ├── ValueObjects/
-        │   │   ├── Money.cs
-        │   │   └── Address.cs
-        │   ├── Enums/
-        │   │   └── OrderStatus.cs
-        │   ├── Exceptions/
-        │   │   └── InsufficientStockException.cs
-        │   └── Interfaces/
-        │       ├── IOrderRepository.cs
-        │       └── IProductRepository.cs
-        │
-        ├── Features/
-        │   ├── Orders/
-        │   │   ├── CreateOrder.cs
-        │   │   ├── GetOrderById.cs
-        │   │   ├── ListOrders.cs
-        │   │   ├── CancelOrder.cs
-        │   │   └── UpdateOrderStatus.cs
-        │   │
-        │   └── Products/
-        │       ├── CreateProduct.cs
-        │       ├── GetProductById.cs
-        │       └── ListProducts.cs
-        │
-        ├── Infrastructure/
-        │   ├── Data/
-        │   │   ├── AppDbContext.cs
-        │   │   └── Configurations/
-        │   │       ├── OrderConfiguration.cs
-        │   │       └── ProductConfiguration.cs
-        │   ├── Repositories/
-        │   │   ├── OrderRepository.cs
-        │   │   └── ProductRepository.cs
-        │   └── DependencyInjection.cs
-        │
-        └── Shared/
-            ├── Behaviours/
-            │   ├── ValidationBehaviour.cs
-            │   └── LoggingBehaviour.cs
-            └── Middleware/
-                └── ExceptionHandlingMiddleware.cs
+├── src/
+│   ├── MyApp.Domain/
+│   │   ├── MyApp.Domain.csproj              ← references NOTHING
+│   │   ├── Entities/
+│   │   │   ├── Order.cs
+│   │   │   ├── OrderItem.cs
+│   │   │   └── Product.cs
+│   │   ├── ValueObjects/
+│   │   │   ├── Money.cs
+│   │   │   └── Address.cs
+│   │   ├── Enums/
+│   │   │   └── OrderStatus.cs
+│   │   ├── Events/
+│   │   │   ├── IDomainEvent.cs
+│   │   │   └── OrderPlacedEvent.cs
+│   │   ├── Exceptions/
+│   │   │   ├── DomainException.cs
+│   │   │   └── InsufficientStockException.cs
+│   │   ├── Interfaces/
+│   │   │   ├── IOrderRepository.cs
+│   │   │   └── IProductRepository.cs
+│   │   └── Services/
+│   │       └── PricingService.cs
+│   │
+│   ├── MyApp.Application/
+│   │   ├── MyApp.Application.csproj          ← references Domain
+│   │   ├── DependencyInjection.cs
+│   │   ├── Common/
+│   │   │   ├── Behaviours/
+│   │   │   │   ├── LoggingBehaviour.cs
+│   │   │   │   └── ValidationBehaviour.cs
+│   │   │   └── Interfaces/
+│   │   │       ├── IDateTimeProvider.cs
+│   │   │       └── ICurrentUserService.cs
+│   │   │
+│   │   ├── Orders/                           ← FEATURE FOLDER
+│   │   │   ├── Commands/
+│   │   │   │   ├── CreateOrder.cs
+│   │   │   │   ├── CreateOrderValidator.cs
+│   │   │   │   ├── CancelOrder.cs
+│   │   │   │   └── CancelOrderValidator.cs
+│   │   │   ├── Queries/
+│   │   │   │   ├── GetOrderById.cs
+│   │   │   │   └── ListOrders.cs
+│   │   │   ├── EventHandlers/
+│   │   │   │   └── OrderPlacedEventHandler.cs
+│   │   │   └── DTOs/
+│   │   │       ├── OrderDto.cs
+│   │   │       └── OrderSummaryDto.cs
+│   │   │
+│   │   └── Products/                         ← FEATURE FOLDER
+│   │       ├── Queries/
+│   │       │   ├── GetProductById.cs
+│   │       │   └── ListProducts.cs
+│   │       └── DTOs/
+│   │           └── ProductDto.cs
+│   │
+│   ├── MyApp.Infrastructure/
+│   │   ├── MyApp.Infrastructure.csproj        ← references Application, Domain
+│   │   ├── DependencyInjection.cs
+│   │   ├── Data/
+│   │   │   ├── AppDbContext.cs
+│   │   │   ├── Configurations/
+│   │   │   │   ├── OrderConfiguration.cs
+│   │   │   │   └── ProductConfiguration.cs
+│   │   │   └── Interceptors/
+│   │   │       └── DomainEventDispatcherInterceptor.cs
+│   │   ├── Repositories/
+│   │   │   ├── OrderRepository.cs
+│   │   │   └── ProductRepository.cs
+│   │   └── Services/
+│   │       ├── DateTimeProvider.cs
+│   │       └── CurrentUserService.cs
+│   │
+│   └── MyApp.Web/
+│       ├── MyApp.Web.csproj                   ← references Application, Infrastructure
+│       ├── Program.cs
+│       ├── appsettings.json
+│       ├── Controllers/
+│       │   ├── OrdersController.cs
+│       │   └── ProductsController.cs
+│       ├── DTOs/
+│       │   ├── CreateOrderRequest.cs
+│       │   └── OrderResponse.cs
+│       └── Middleware/
+│           └── ExceptionHandlingMiddleware.cs
+│
+└── tests/
+    ├── MyApp.Domain.Tests/
+    ├── MyApp.Application.Tests/
+    ├── MyApp.Infrastructure.Tests/
+    └── MyApp.Web.Tests/
 ```
 
-**Domain/** — Entities with behaviour, value objects, enums, domain exceptions, and repository interfaces. This is the Clean Architecture core — it defines business rules and has zero dependencies on anything outside itself. No `using MyApp.Infrastructure;`, no `using MyApp.Features;`.
+**The key difference from [STR003](STR003%20-%20full-clean-architecture.md):** In STR003, Application is organised as:
 
-**Features/** — One file per use case, organised by resource. Each file is a self-contained vertical slice containing its request/response types, validator, handler, and endpoint mapping. Features depend on Domain/ (for entities and repository interfaces) and are wired to Infrastructure/ through DI.
+```
+Application/
+├── Orders/
+│   ├── Commands/
+│   │   ├── CreateOrder/
+│   │   │   ├── CreateOrderCommand.cs
+│   │   │   ├── CreateOrderCommandHandler.cs
+│   │   │   └── CreateOrderCommandValidator.cs
+│   │   └── CancelOrder/
+│   │       └── ...
+│   └── Queries/
+│       └── GetOrderById/
+│           └── ...
+```
 
-**Infrastructure/** — DbContext, repository implementations, external service clients. Implements interfaces defined in Domain/. This is the only place that knows about EF Core, HTTP clients, or any external dependency.
+In STR008, each feature folder groups commands, queries, event handlers, and DTOs together:
 
-**Shared/** — MediatR pipeline behaviours and middleware. Infrastructure plumbing only — if business logic appears here, move it to Domain/ or the relevant feature.
+```
+Application/
+├── Orders/
+│   ├── Commands/
+│   │   ├── CreateOrder.cs              ← command + handler in one file
+│   │   ├── CreateOrderValidator.cs
+│   │   ├── CancelOrder.cs
+│   │   └── CancelOrderValidator.cs
+│   ├── Queries/
+│   │   ├── GetOrderById.cs             ← query + handler in one file
+│   │   └── ListOrders.cs
+│   ├── EventHandlers/
+│   │   └── OrderPlacedEventHandler.cs
+│   └── DTOs/
+│       ├── OrderDto.cs
+│       └── OrderSummaryDto.cs
+```
+
+The command/query record and its handler live in the **same file**. No separate `CreateOrderCommand.cs` + `CreateOrderCommandHandler.cs` — they're one unit. Validators stay in a separate file because they can grow large.
 
 ## Dependency Rules
 
+Identical to [STR003](STR003%20-%20full-clean-architecture.md):
+
+```mermaid
+graph TD
+    Web[MyApp.Web] --> Application[MyApp.Application]
+    Web --> Infrastructure[MyApp.Infrastructure]
+    Application --> Domain[MyApp.Domain]
+    Infrastructure --> Application
+    Infrastructure --> Domain
 ```
-Features/  ──→  Domain/
-    │
-    │ (via DI)
-    ▼
-Infrastructure/  ──→  Domain/
 
-Features/ ✗──→ Infrastructure/    ← NEVER directly
-Domain/   ✗──→ anything           ← NEVER
-```
+- `Domain` references nothing.
+- `Application` references only `Domain`.
+- `Infrastructure` references `Application` and `Domain`.
+- `Web` references `Application` and `Infrastructure`.
+- **Application MUST NOT reference Infrastructure.**
+- **Web MUST NOT reference Domain directly** — it works through Application DTOs.
 
-- **Domain/** references nothing. It contains pure C# with no NuGet packages, no infrastructure types, no framework dependencies.
-- **Features/** reference **Domain/** only. Each handler depends on repository interfaces from Domain/, injected via DI. Features never reference Infrastructure/ directly — they don't know if they're backed by SQL Server, PostgreSQL, or a file system.
-- **Infrastructure/** references **Domain/** to implement its interfaces.
-- **Features never reference other features.** `CreateOrder` does not call `GetProductById`. If a feature needs product data, it injects `IProductRepository` and queries directly.
-- **Shared/** is referenced by the MediatR pipeline — features flow through it automatically.
-
-Enforce with architecture tests:
-
-```csharp
-[Fact]
-public void Domain_ShouldNotReference_Features_Or_Infrastructure()
-{
-    var domainTypes = typeof(Order).Assembly.GetTypes()
-        .Where(t => t.Namespace?.StartsWith("MyApp.Domain") == true);
-
-    foreach (var type in domainTypes)
-    {
-        var referencedNamespaces = type.GetFields(BindingFlags.NonPublic | BindingFlags.Instance)
-            .Select(f => f.FieldType.Namespace);
-        referencedNamespaces.Should().NotContain(ns =>
-            ns != null && (ns.StartsWith("MyApp.Features") || ns.StartsWith("MyApp.Infrastructure")));
-    }
-}
-```
+The compiler enforces these through `.csproj` `<ProjectReference>` entries.
 
 ## Naming Conventions
 
 | Element | Convention | Location | Example |
 |---------|-----------|----------|---------|
-| Entity | singular noun, behaviour-rich | Domain/Entities | `Order` |
-| Value Object | singular noun, immutable | Domain/ValueObjects | `Money` |
-| Repository interface | `I{Entity}Repository` | Domain/Interfaces | `IOrderRepository` |
-| Repository implementation | `{Entity}Repository` | Infrastructure/Repositories | `OrderRepository` |
-| Feature folder | plural resource noun | Features/ | `Orders/`, `Products/` |
-| Feature file | `{Verb}{Entity}` | Features/{Resource}/ | `CreateOrder.cs` |
-| Request type | nested `Command` or `Query` | inside feature class | `CreateOrder.Command` |
-| Response type | nested `Result` | inside feature class | `CreateOrder.Result` |
-| Validator | nested `Validator` | inside feature class | `CreateOrder.Validator` |
-| Handler | nested `Handler` | inside feature class | `CreateOrder.Handler` |
-| Domain exception | `{Noun}Exception` | Domain/Exceptions | `InsufficientStockException` |
+| Entity | singular noun | Domain/Entities | `Order` |
+| Value Object | singular noun | Domain/ValueObjects | `Money` |
+| Domain Event | `{Entity}{PastVerb}Event` | Domain/Events | `OrderPlacedEvent` |
+| Repository Interface | `I{Entity}Repository` | Domain/Interfaces | `IOrderRepository` |
+| Repository Impl | `{Entity}Repository` | Infrastructure/Repositories | `OrderRepository` |
+| Feature folder | plural noun | Application/ | `Orders/`, `Products/` |
+| Command | `{Verb}{Entity}` | Application/{Feature}/Commands | `CreateOrder` |
+| Command handler | nested inside command | same file | `CreateOrder.Handler` |
+| Command validator | `{Verb}{Entity}Validator` | Application/{Feature}/Commands | `CreateOrderValidator` |
+| Query | `{Verb}{Entity}` | Application/{Feature}/Queries | `GetOrderById` |
+| Query handler | nested inside query | same file | `GetOrderById.Handler` |
+| Application DTO | `{Entity}Dto` | Application/{Feature}/DTOs | `OrderDto` |
+| API Request DTO | `{Verb}{Entity}Request` | Web/DTOs | `CreateOrderRequest` |
+| API Response DTO | `{Entity}Response` | Web/DTOs | `OrderResponse` |
+| Event Handler | `{EventName}Handler` | Application/{Feature}/EventHandlers | `OrderPlacedEventHandler` |
+
+Each command/query file contains both the record and its handler as a nested class. This is the core ergonomic improvement over [STR003](STR003%20-%20full-clean-architecture.md).
 
 ## Key Abstractions
 
-Domain entity with behaviour (same as [STR002](STR002%20-%20clean-architecture-lite.md)):
+Domain entity with behaviour (identical to [STR003](STR003%20-%20full-clean-architecture.md)):
 
 ```csharp
 public class Order
 {
     private readonly List<OrderItem> _items = [];
+    private readonly List<IDomainEvent> _domainEvents = [];
 
     public Guid Id { get; private set; }
     public OrderStatus Status { get; private set; }
     public Address ShippingAddress { get; private set; }
-    public Money Total => _items.Aggregate(Money.Zero, (sum, i) => sum + i.LineTotal);
+    public Money Total => CalculateTotal();
     public IReadOnlyList<OrderItem> Items => _items.AsReadOnly();
+    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
     public Order(Address shippingAddress)
     {
@@ -178,39 +242,31 @@ public class Order
     {
         if (_items.Count == 0)
             throw new DomainException("Cannot submit an empty order.");
+
         Status = OrderStatus.Submitted;
+        _domainEvents.Add(new OrderPlacedEvent(Id));
     }
+
+    private Money CalculateTotal() =>
+        _items.Aggregate(Money.Zero, (sum, item) => sum + item.LineTotal);
 }
 ```
 
-Feature slice (same shape as [STR004](STR004%20-%20vertical-slice.md), but handler calls domain entity methods instead of doing logic inline):
+Command with nested handler — the defining file pattern of this architecture:
 
 ```csharp
-// Features/Orders/CreateOrder.cs
-public static class CreateOrder
+// Application/Orders/Commands/CreateOrder.cs
+public sealed record CreateOrder(
+    string Street, string City, string PostCode,
+    List<CreateOrder.LineItem> Items) : IRequest<Guid>
 {
-    public sealed record Command(
-        string Street, string City, string PostCode,
-        List<OrderLineItem> Items) : IRequest<Result>;
+    public sealed record LineItem(Guid ProductId, int Quantity);
 
-    public sealed record OrderLineItem(Guid ProductId, int Quantity);
-    public sealed record Result(Guid OrderId, decimal Total);
-
-    public sealed class Validator : AbstractValidator<Command>
-    {
-        public Validator()
-        {
-            RuleFor(x => x.Items).NotEmpty();
-            RuleFor(x => x.Street).NotEmpty();
-            RuleFor(x => x.City).NotEmpty();
-        }
-    }
-
-    public sealed class Handler(
+    internal sealed class Handler(
         IOrderRepository orders,
-        IProductRepository products) : IRequestHandler<Command, Result>
+        IProductRepository products) : IRequestHandler<CreateOrder, Guid>
     {
-        public async Task<Result> Handle(Command request, CancellationToken ct)
+        public async Task<Guid> Handle(CreateOrder request, CancellationToken ct)
         {
             var address = new Address(request.Street, request.City, request.PostCode);
             var order = new Order(address);
@@ -226,141 +282,228 @@ public static class CreateOrder
             await orders.AddAsync(order);
             await orders.SaveChangesAsync(ct);
 
-            return new Result(order.Id, order.Total.Amount);
+            return order.Id;
         }
     }
+}
+```
 
-    public static void MapEndpoints(IEndpointRouteBuilder app)
+Validator in a separate file:
+
+```csharp
+// Application/Orders/Commands/CreateOrderValidator.cs
+public sealed class CreateOrderValidator : AbstractValidator<CreateOrder>
+{
+    public CreateOrderValidator()
     {
-        app.MapPost("/api/orders", async (Command command, IMediator mediator) =>
+        RuleFor(x => x.Items).NotEmpty();
+        RuleFor(x => x.Street).NotEmpty();
+        RuleFor(x => x.City).NotEmpty();
+        RuleFor(x => x.PostCode).NotEmpty();
+        RuleForEach(x => x.Items).ChildRules(item =>
         {
-            var result = await mediator.Send(command);
-            return Results.Created($"/api/orders/{result.OrderId}", result);
+            item.RuleFor(x => x.ProductId).NotEmpty();
+            item.RuleFor(x => x.Quantity).GreaterThan(0);
         });
     }
 }
 ```
 
-The critical difference from pure [STR004](STR004%20-%20vertical-slice.md): the handler doesn't check stock or validate order state — it calls `order.AddItem()` and `order.Submit()`, which enforce those rules internally. Business logic lives in the entity, not the handler.
-
-DI wiring in `Program.cs`:
+Query with nested handler:
 
 ```csharp
-builder.Services.AddMediatR(cfg =>
-    cfg.RegisterServicesFromAssemblyContaining<Program>());
-builder.Services.AddValidatorsFromAssemblyContaining<Program>();
-builder.Services.AddInfrastructure(builder.Configuration);
+// Application/Orders/Queries/GetOrderById.cs
+public sealed record GetOrderById(Guid OrderId) : IRequest<OrderDto?>
+{
+    internal sealed class Handler(
+        IOrderRepository orders) : IRequestHandler<GetOrderById, OrderDto?>
+    {
+        public async Task<OrderDto?> Handle(GetOrderById request, CancellationToken ct)
+        {
+            var order = await orders.GetByIdAsync(request.OrderId);
+            return order is null ? null : new OrderDto(
+                order.Id,
+                order.Status,
+                order.Total.Amount,
+                order.Items.Select(i => new OrderDto.LineItemDto(
+                    i.ProductId, i.Quantity, i.LineTotal.Amount)).ToList());
+        }
+    }
+}
+```
 
-var app = builder.Build();
+DI registration:
 
-CreateOrder.MapEndpoints(app);
-GetOrderById.MapEndpoints(app);
-ListOrders.MapEndpoints(app);
-// ... or use assembly scanning
+```csharp
+// Application/DependencyInjection.cs
+public static class DependencyInjection
+{
+    public static IServiceCollection AddApplication(this IServiceCollection services)
+    {
+        services.AddMediatR(cfg =>
+            cfg.RegisterServicesFromAssemblyContaining<CreateOrder>());
+        services.AddValidatorsFromAssemblyContaining<CreateOrder>();
+        return services;
+    }
+}
+
+// Program.cs
+builder.Services
+    .AddApplication()
+    .AddInfrastructure(builder.Configuration);
 ```
 
 ## Data Flow
 
-A `POST /api/orders` request:
+**Command flow — `POST /api/orders`:**
 
 ```
-HTTP POST /api/orders
+HTTP Request
     │
     ▼
-Minimal API endpoint (defined in CreateOrder.MapEndpoints)
-    │  deserialises body → CreateOrder.Command
+OrdersController.Create(CreateOrderRequest dto)
+    │  maps API DTO → CreateOrder command
     ▼
-MediatR.Send(Command)
+MediatR.Send(CreateOrder)
     │
     ▼
-ValidationBehaviour (Shared/)
-    │  runs CreateOrder.Validator
+ValidationBehaviour<CreateOrder>
+    │  runs CreateOrderValidator
     ▼
 CreateOrder.Handler.Handle()
-    │  calls IProductRepository (Domain interface → Infrastructure impl)
-    │  creates Order entity, calls order.AddItem() — DOMAIN validates stock
-    │  calls order.Submit() — DOMAIN validates non-empty
-    │  calls IOrderRepository.AddAsync() + SaveChangesAsync()
+    │  loads Product entities via IProductRepository
+    │  creates Order entity, calls order.AddItem(), order.Submit()
+    │  persists via IOrderRepository
     ▼
-OrderRepository (Infrastructure) → AppDbContext → Database INSERT
+OrderRepository.AddAsync() → AppDbContext.SaveChangesAsync()
     │
     ▼
-CreateOrder.Result returned → HTTP 201 Created
+DomainEventDispatcherInterceptor
+    │  dispatches OrderPlacedEvent via MediatR
+    ▼
+OrderPlacedEventHandler handles event
+    │
+    ▼
+Guid returned → Controller returns 201 Created
 ```
 
-Compare with the two parent patterns:
-- **vs [STR002](STR002%20-%20clean-architecture-lite.md):** Same domain model, but use cases are self-contained files in Features/ instead of separate command/handler/validator files in Application/.
-- **vs [STR004](STR004%20-%20vertical-slice.md):** Same file-per-feature structure, but business logic is in domain entities instead of inline in handlers.
+**Query flow — `GET /api/orders/{id}`:**
+
+```
+HTTP Request
+    │
+    ▼
+OrdersController.GetById(Guid id)
+    │  creates GetOrderById query
+    ▼
+MediatR.Send(GetOrderById)
+    │
+    ▼
+GetOrderById.Handler.Handle()
+    │  queries via IOrderRepository
+    │  maps to OrderDto
+    ▼
+OrderDto returned → Controller maps to OrderResponse → 200 OK
+```
+
+Identical data flow to [STR003](STR003%20-%20full-clean-architecture.md). The only difference is file organisation — not runtime behaviour.
 
 ## Where Business Logic Lives
 
-**In Domain/ entities and value objects — orchestrated by feature handlers.**
+**In `MyApp.Domain`.** Same rule as [STR003](STR003%20-%20full-clean-architecture.md).
 
-This is the hybrid rule:
-
-- **Domain entities** enforce invariants. `Order.AddItem()` checks stock. `Order.Submit()` validates state. An entity is never in an invalid state. This comes from Clean Architecture.
-- **Feature handlers** orchestrate: load entities via repository interfaces, call entity methods, save. This comes from Vertical Slice — the handler is the use case, and it's self-contained in one file.
-- **If a handler contains `if` statements about business rules**, move them into the entity. The handler should read as "load → tell entity to do something → save."
-- **If domain logic is specific to one feature and will never be shared**, it's acceptable to keep it in the handler. But default to the entity.
+- **Domain entities** enforce invariants. An entity is never in an invalid state.
+- **Domain services** handle cross-entity logic.
+- **Application handlers** orchestrate: load → call domain methods → save. No business rules in handlers.
+- **Feature folders don't change where logic lives** — they change where you *find* things. Business logic is still in Domain, not scattered across feature folders.
 
 ## Testing Strategy
 
 ```
-MyApp/
-├── src/
-│   └── MyApp/
-└── tests/
-    ├── MyApp.UnitTests/
-    │   ├── MyApp.UnitTests.csproj
-    │   ├── Domain/
-    │   │   ├── OrderTests.cs
-    │   │   └── MoneyTests.cs
-    │   └── Features/
-    │       ├── CreateOrderTests.cs
-    │       └── CancelOrderTests.cs
-    └── MyApp.IntegrationTests/
-        ├── MyApp.IntegrationTests.csproj
-        ├── CustomWebApplicationFactory.cs
-        └── Features/
-            ├── Orders/
-            │   ├── CreateOrderTests.cs
-            │   └── ListOrdersTests.cs
-            └── Products/
-                └── ListProductsTests.cs
+tests/
+├── MyApp.Domain.Tests/
+│   ├── MyApp.Domain.Tests.csproj          ← references Domain only
+│   ├── Entities/
+│   │   └── OrderTests.cs
+│   └── ValueObjects/
+│       └── MoneyTests.cs
+│
+├── MyApp.Application.Tests/
+│   ├── MyApp.Application.Tests.csproj     ← references Application, Domain
+│   └── Orders/                            ← mirrors feature folder structure
+│       ├── Commands/
+│       │   ├── CreateOrderTests.cs
+│       │   └── CreateOrderValidatorTests.cs
+│       └── Queries/
+│           └── GetOrderByIdTests.cs
+│
+├── MyApp.Infrastructure.Tests/
+│   ├── MyApp.Infrastructure.Tests.csproj
+│   └── Repositories/
+│       └── OrderRepositoryTests.cs
+│
+└── MyApp.Web.Tests/
+    ├── MyApp.Web.Tests.csproj
+    ├── CustomWebApplicationFactory.cs
+    └── Endpoints/
+        ├── OrdersEndpointTests.cs
+        └── ProductsEndpointTests.cs
 ```
 
-**Domain unit tests** — the highest-value tests. Pure C#, no mocks, no DI. Test entity behaviour directly:
+Test projects mirror the source structure. Application tests follow feature folder layout.
+
+**Domain.Tests** — pure unit tests. No mocks, no database.
+
+**Application.Tests** — handler tests with mocked repositories. Verify orchestration. Validator tests with known inputs.
 
 ```csharp
-[Fact]
-public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
+public class CreateOrderTests
 {
-    var product = new Product("Widget", stockQuantity: 2, price: 9.99m);
-    var order = new Order(new Address("123 Main St", "London", "SW1A 1AA"));
+    private readonly IOrderRepository _orders = Substitute.For<IOrderRepository>();
+    private readonly IProductRepository _products = Substitute.For<IProductRepository>();
+    private readonly CreateOrder.Handler _sut;
 
-    Assert.Throws<InsufficientStockException>(
-        () => order.AddItem(product, quantity: 5));
+    public CreateOrderTests()
+    {
+        _sut = new CreateOrder.Handler(_orders, _products);
+    }
+
+    [Fact]
+    public async Task ValidOrder_PersistsAndReturnsId()
+    {
+        var product = new Product("Widget", stockQuantity: 10, price: 9.99m);
+        _products.GetByIdAsync(product.Id).Returns(product);
+
+        var command = new CreateOrder("1 Main St", "London", "SW1A",
+            [new CreateOrder.LineItem(product.Id, 2)]);
+
+        var orderId = await _sut.Handle(command, CancellationToken.None);
+
+        orderId.Should().NotBeEmpty();
+        await _orders.Received(1).AddAsync(Arg.Any<Order>());
+        await _orders.Received(1).SaveChangesAsync(Arg.Any<CancellationToken>());
+    }
 }
 ```
 
-**Feature handler unit tests** — test orchestration with mocked repositories. Verify the handler calls entity methods correctly and handles not-found/error cases.
+**Infrastructure.Tests** — integration tests with Testcontainers.
 
-**Integration tests** — test features end-to-end via HTTP using `WebApplicationFactory` + Testcontainers. Mirror the feature folder structure in tests.
+**Web.Tests** — full HTTP pipeline tests with `WebApplicationFactory`.
 
 ## Common Mistakes
 
-1. **Business logic in handlers instead of entities.** The handler checks `if (product.StockQuantity < quantity)` instead of calling `order.AddItem(product, quantity)`. If the handler is making business decisions, move them to the entity. The handler orchestrates; the entity decides.
+1. **Splitting command and handler into separate files.** The whole point of this pattern is co-location. `CreateOrder` (record) and `CreateOrder.Handler` (nested class) live in one file. If you separate them, you've just recreated [STR003](STR003%20-%20full-clean-architecture.md) with different folder names.
 
-2. **Features referencing Infrastructure directly.** A handler injects `AppDbContext` instead of `IOrderRepository`. This couples the feature to EF Core. Always depend on the repository interface from Domain/.
+2. **Business logic in handlers.** Feature folders don't change where logic lives. The handler still just orchestrates — business rules still belong in Domain entities. Don't let the feature-folder ergonomics tempt you into putting logic in the handler "because it's right there."
 
-3. **Empty Domain layer.** If your entities have no methods and the handlers do all the work, you've built [STR004](STR004%20-%20vertical-slice.md) with an empty Domain folder. Either add real entity behaviour or drop the domain layer and use pure vertical slices.
+3. **Feature folders referencing each other.** `Orders/Commands/CreateOrder.Handler` imports a DTO from `Products/DTOs/ProductDto.cs`. Feature folders within Application should be independent. If a handler needs product data, it uses `IProductRepository` from Domain, not another feature's DTO.
 
-4. **Features calling other features.** `CreateOrder.Handler` sends `GetProductById.Query` via MediatR to fetch a product. Don't do this — inject `IProductRepository` and query directly. Features are independent slices.
+4. **Mixing feature-folder and layer-first organisation.** Some features use `Orders/Commands/CreateOrder.cs`, others put everything in `Payments/CreatePaymentCommand.cs` without the Commands/Queries subfolder. Pick one structure and apply it consistently across all features.
 
-5. **Shared abstractions that create coupling.** `IFeatureHandler<TRequest, TResult>`, `FeatureBase<T>` — these shared base classes undermine the independence of slices. Use MediatR's `IRequest`/`IRequestHandler` directly.
+5. **Forgetting DTOs are per-feature.** `OrderDto` lives in `Orders/DTOs/`, not in a shared `Common/DTOs/` folder. Each feature defines the shape it needs. If two features need different views of an order, they each define their own DTO.
 
-6. **Domain/ referencing Features/ or Infrastructure/.** If an entity has `using MyApp.Features;` or `using MyApp.Infrastructure;`, the dependency direction is wrong. Domain/ is the core — it references nothing.
+6. **Validators that enforce business rules.** FluentValidation validators in Application should check structural validity (non-empty, correct format, within range). Business rules ("order cannot exceed credit limit") belong in Domain entities, not validators.
 
-7. **Over-engineering simple CRUD features.** If `GetProductById` is just "fetch from DB, map to DTO, return" — that's fine. Not every feature needs rich domain interaction. Let simple features be simple; reserve domain entities for features with real business rules.
+7. **Giant feature folders.** If `Orders/` has 30+ files, break it into sub-features: `Orders/Placement/`, `Orders/Fulfilment/`, `Orders/Returns/`. The feature folder should be scannable at a glance.
 
-8. **No architecture tests.** Without separate projects, nothing prevents a developer from adding `using MyApp.Infrastructure;` in a domain entity. Add NetArchTest or ArchUnitNET tests to CI to enforce the dependency rules.
+8. **Web controllers organised differently from Application features.** If Application has `Orders/`, `Products/`, `Shipping/`, the Web controllers should mirror that grouping. `OrdersController` maps to the `Orders/` feature folder. Don't reorganise at the API layer.
