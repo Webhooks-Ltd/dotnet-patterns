@@ -127,7 +127,7 @@ MyApp/
 
 **MyApp.Domain** — Entities with behaviour, value objects, domain events, domain exceptions, repository interfaces, and domain services. Zero NuGet packages (except possibly a primitives library). This project defines the ubiquitous language.
 
-**MyApp.Application** — Commands, queries, handlers, validators, DTOs, pipeline behaviours. Uses MediatR for dispatching. Defines application-level interfaces (`IDateTimeProvider`, `ICurrentUserService`). Contains no business rules — only orchestration.
+**MyApp.Application** — Commands, queries, handlers, validators, DTOs, pipeline behaviours. Uses a mediator to dispatch commands and queries to their handlers. Defines application-level interfaces (`IDateTimeProvider`, `ICurrentUserService`). Contains no business rules — only orchestration.
 
 **MyApp.Infrastructure** — EF Core, repository implementations, external service clients, infrastructure service implementations. Everything that talks to something outside the process.
 
@@ -225,24 +225,24 @@ public class Order
 }
 ```
 
-MediatR command and handler:
+Command and handler (define `ICommand<T>` / `ICommandHandler<T, TResult>` in `Application/Common/`, or use the interfaces from your chosen mediator library — MediatR, Wolverine, etc.):
 
 ```csharp
 public sealed record CreateOrderCommand(
     string Street, string City, string PostCode,
-    List<OrderItemDto> Items) : IRequest<Guid>;
+    List<OrderItemDto> Items) : ICommand<Guid>;
 
 public sealed class CreateOrderCommandHandler(
     IOrderRepository orders,
-    IProductRepository products) : IRequestHandler<CreateOrderCommand, Guid>
+    IProductRepository products) : ICommandHandler<CreateOrderCommand, Guid>
 {
-    public async Task<Guid> Handle(
-        CreateOrderCommand request, CancellationToken cancellationToken)
+    public async Task<Guid> HandleAsync(
+        CreateOrderCommand command, CancellationToken cancellationToken)
     {
-        var address = new Address(request.Street, request.City, request.PostCode);
+        var address = new Address(command.Street, command.City, command.PostCode);
         var order = new Order(address);
 
-        foreach (var item in request.Items)
+        foreach (var item in command.Items)
         {
             var product = await products.GetByIdAsync(item.ProductId)
                 ?? throw new NotFoundException(nameof(Product), item.ProductId);
@@ -263,7 +263,7 @@ DI registration pattern:
 ```csharp
 // Program.cs
 builder.Services
-    .AddApplication()      // MediatR, validators, behaviours
+    .AddApplication()      // mediator, validators, behaviours
     .AddInfrastructure(builder.Configuration);  // DbContext, repositories, services
 ```
 
@@ -278,7 +278,7 @@ HTTP Request
 OrdersController.Create(CreateOrderRequest dto)
     │  maps API DTO → CreateOrderCommand
     ▼
-MediatR.Send(CreateOrderCommand)
+Mediator dispatches CreateOrderCommand
     │
     ▼
 ValidationBehaviour<CreateOrderCommand>
@@ -293,7 +293,7 @@ OrderRepository.AddAsync() → AppDbContext.SaveChangesAsync()
     │
     ▼
 DomainEventDispatcherInterceptor catches SaveChanges
-    │  dispatches OrderPlacedEvent via MediatR
+    │  dispatches OrderPlacedEvent via mediator
     ▼
 OrderPlacedEventHandler handles the event (e.g., sends confirmation email)
     │
@@ -313,7 +313,7 @@ HTTP Request
 OrdersController.GetById(Guid id)
     │  creates GetOrderByIdQuery
     ▼
-MediatR.Send(GetOrderByIdQuery)
+Mediator dispatches GetOrderByIdQuery
     │
     ▼
 GetOrderByIdQueryHandler.Handle()
@@ -392,7 +392,7 @@ tests/
 
 4. **Application referencing Infrastructure.** A handler injects `AppDbContext` directly instead of using `IOrderRepository`. This violates the dependency rule. Define an interface in Application or Domain; implement it in Infrastructure.
 
-5. **Over-abstracting with MediatR.** Creating `ICommand`, `IQuery`, `ICommandHandler<T>`, `IQueryHandler<T>` wrapper interfaces on top of MediatR's own interfaces. Use MediatR's `IRequest<T>` and `IRequestHandler<T, TResponse>` directly.
+5. **Over-abstracting the mediator.** Wrapping your mediator library's interfaces in additional layers of abstraction. If your library provides `IRequest<T>` and `IRequestHandler<T, TResult>`, use them directly rather than wrapping them in project-specific interfaces that add no value.
 
 6. **One handler per CRUD operation for a simple entity.** If an entity is genuinely CRUD (no business rules, no invariants), don't force it through command/query handlers. Consider a simpler approach for that entity, or accept that not every entity needs the full ceremony.
 

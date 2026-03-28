@@ -205,7 +205,7 @@ public sealed class OrdersModule : IModule
                 sql => sql.MigrationsHistoryTable("__EFMigrationsHistory", "orders")));
 
         services.AddScoped<IOrderRepository, OrderRepository>();
-        services.AddMediatR(cfg => cfg.RegisterServicesFromAssemblyContaining<OrdersModule>());
+        services.AddModuleMediator(typeof(OrdersModule).Assembly);
     }
 
     public static void MapEndpoints(IEndpointRouteBuilder app)
@@ -242,7 +242,7 @@ PaymentsModule.MapEndpoints(app);
 HTTP POST /api/orders
     │
     ▼
-OrdersEndpoints.Create → MediatR.Send(CreateOrderCommand)
+OrdersEndpoints.Create → mediator dispatches CreateOrderCommand
     │
     ▼
 CreateOrderCommandHandler

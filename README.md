@@ -14,10 +14,14 @@ A reference library of solution-level architecture patterns for .NET/C# projects
 | [`STR006`](patterns/STR006%20-%20hexagonal.md) | Hexagonal (Ports & Adapters) | Domain at centre, ports define all external interaction |
 | [`STR007`](patterns/STR007%20-%20microservices.md) | Microservices | Independent services, own databases, async messaging |
 | [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
+| [`STR009`](patterns/STR009%20-%20minimal-api.md) | Minimal API | Endpoint-focused, no controllers, explicit route registration |
+| [`STR010`](patterns/STR010%20-%20worker-service.md) | Worker Service | Background processing — queue consumers, scheduled jobs, long-running services |
+| [`DSG001`](patterns/DSG001%20-%20cqrs.md) | CQRS | Separate read/write models — applies within any structural pattern |
 
 ## Categories
 
-All patterns in this catalogue are **`STR` — Structural:** they define how to organise a .NET solution at the project/folder level. Future categories may include `DSG` (Design patterns) and `INF` (Infrastructure patterns).
+- **`STR` — Structural:** How to organise a .NET solution at the project/folder level.
+- **`DSG` — Design:** Cross-cutting design patterns that layer on top of structural patterns. Future additions may include `INF` (Infrastructure patterns).
 
 ## Decision Matrix
 
@@ -32,7 +36,9 @@ Use the first row where **all** conditions in the "When" column are true.
 | [`STR005`](patterns/STR005%20-%20modular-monolith.md) | Modular Monolith | 5–20 | High | 1 | Multiple bounded contexts, want service-like autonomy without distributed overhead |
 | [`STR006`](patterns/STR006%20-%20hexagonal.md) | Hexagonal | 3–10 | High | 1+ | Multiple entry points (API, queue, CLI) to the same domain |
 | [`STR007`](patterns/STR007%20-%20microservices.md) | Microservices | 15+ | High | Many | Teams need independent deployment; you've outgrown a monolith |
-| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean + Feature Folders | 3–8 | Medium–High | 1+ | Want STR003's rigour but find Commands/Queries split hard to navigate |
+| [`STR008`](patterns/STR008%20-%20clean-vertical-slice.md) | Clean + Feature Folders | 3–8 | Medium–High | 1+ | Want STR003's rigour with feature-level co-location of commands, queries, and DTOs |
+| [`STR009`](patterns/STR009%20-%20minimal-api.md) | Minimal API | 1–4 | Low–Medium | 1 | Lightweight API, no MVC overhead, endpoint-focused |
+| [`STR010`](patterns/STR010%20-%20worker-service.md) | Worker Service | 1–4 | Any | 1 | Background processing — no HTTP pipeline |
 
 ### How to read the matrix
 
@@ -55,9 +61,13 @@ Patterns aren't always exclusive. Some compose well:
 graph LR
     STR001 --> STR002 --> STR003
     STR001 --> STR004
+    STR001 --> STR009
     STR003 --> STR008
     STR004 --> STR005 --> STR007
     STR005 --> STR006
+    DSG001[DSG001 CQRS] -.- STR003
+    DSG001 -.- STR004
+    DSG001 -.- STR008
     click STR001 "patterns/STR001 - n-tier.md"
     click STR002 "patterns/STR002 - clean-architecture-lite.md"
     click STR003 "patterns/STR003 - full-clean-architecture.md"
@@ -66,6 +76,9 @@ graph LR
     click STR006 "patterns/STR006 - hexagonal.md"
     click STR007 "patterns/STR007 - microservices.md"
     click STR008 "patterns/STR008 - clean-vertical-slice.md"
+    click STR009 "patterns/STR009 - minimal-api.md"
+    click STR010 "patterns/STR010 - worker-service.md"
+    click DSG001 "patterns/DSG001 - cqrs.md"
 ```
 
 ## Each Pattern Covers

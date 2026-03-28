@@ -252,26 +252,26 @@ public class Order
 }
 ```
 
-Command with nested handler — the defining file pattern of this architecture:
+Command with nested handler — the defining file pattern of this architecture. Use `ICommand<T>` / `ICommandHandler` from your chosen mediator library (MediatR, Wolverine, etc.) or define your own:
 
 ```csharp
 // Application/Orders/Commands/CreateOrder.cs
 public sealed record CreateOrder(
     string Street, string City, string PostCode,
-    List<CreateOrder.LineItem> Items) : IRequest<Guid>
+    List<CreateOrder.LineItem> Items) : ICommand<Guid>
 {
     public sealed record LineItem(Guid ProductId, int Quantity);
 
     internal sealed class Handler(
         IOrderRepository orders,
-        IProductRepository products) : IRequestHandler<CreateOrder, Guid>
+        IProductRepository products) : ICommandHandler<CreateOrder, Guid>
     {
-        public async Task<Guid> Handle(CreateOrder request, CancellationToken ct)
+        public async Task<Guid> HandleAsync(CreateOrder command, CancellationToken ct)
         {
-            var address = new Address(request.Street, request.City, request.PostCode);
+            var address = new Address(command.Street, command.City, command.PostCode);
             var order = new Order(address);
 
-            foreach (var item in request.Items)
+            foreach (var item in command.Items)
             {
                 var product = await products.GetByIdAsync(item.ProductId)
                     ?? throw new NotFoundException(nameof(Product), item.ProductId);
@@ -313,14 +313,14 @@ Query with nested handler:
 
 ```csharp
 // Application/Orders/Queries/GetOrderById.cs
-public sealed record GetOrderById(Guid OrderId) : IRequest<OrderDto?>
+public sealed record GetOrderById(Guid OrderId) : IQuery<OrderDto?>
 {
     internal sealed class Handler(
-        IOrderRepository orders) : IRequestHandler<GetOrderById, OrderDto?>
+        IOrderRepository orders) : IQueryHandler<GetOrderById, OrderDto?>
     {
-        public async Task<OrderDto?> Handle(GetOrderById request, CancellationToken ct)
+        public async Task<OrderDto?> HandleAsync(GetOrderById query, CancellationToken ct)
         {
-            var order = await orders.GetByIdAsync(request.OrderId);
+            var order = await orders.GetByIdAsync(query.OrderId);
             return order is null ? null : new OrderDto(
                 order.Id,
                 order.Status,
@@ -340,8 +340,7 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
-        services.AddMediatR(cfg =>
-            cfg.RegisterServicesFromAssemblyContaining<CreateOrder>());
+        services.AddMediator(typeof(CreateOrder).Assembly);
         services.AddValidatorsFromAssemblyContaining<CreateOrder>();
         return services;
     }
@@ -364,7 +363,7 @@ HTTP Request
 OrdersController.Create(CreateOrderRequest dto)
     │  maps API DTO → CreateOrder command
     ▼
-MediatR.Send(CreateOrder)
+Mediator dispatches CreateOrder
     │
     ▼
 ValidationBehaviour<CreateOrder>
@@ -379,7 +378,7 @@ OrderRepository.AddAsync() → AppDbContext.SaveChangesAsync()
     │
     ▼
 DomainEventDispatcherInterceptor
-    │  dispatches OrderPlacedEvent via MediatR
+    │  dispatches OrderPlacedEvent via mediator
     ▼
 OrderPlacedEventHandler handles event
     │
@@ -396,7 +395,7 @@ HTTP Request
 OrdersController.GetById(Guid id)
     │  creates GetOrderById query
     ▼
-MediatR.Send(GetOrderById)
+Mediator dispatches GetOrderById
     │
     ▼
 GetOrderById.Handler.Handle()

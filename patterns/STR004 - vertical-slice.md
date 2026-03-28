@@ -121,7 +121,7 @@ Everything for one operation nests inside a single static class. The file name m
 
 ## Key Abstractions
 
-A complete slice using MediatR and Minimal API:
+A complete slice using a mediator (MediatR, Wolverine, or hand-rolled) and Minimal API:
 
 ```csharp
 // Features/Orders/CreateOrder.cs
@@ -130,7 +130,7 @@ public static class CreateOrder
     public sealed record Command(
         Guid ProductId,
         int Quantity,
-        string ShippingAddress) : IRequest<Result>;
+        string ShippingAddress);
 
     public sealed record Result(Guid OrderId, decimal Total);
 
@@ -144,29 +144,29 @@ public static class CreateOrder
         }
     }
 
-    public sealed class Handler(AppDbContext db) : IRequestHandler<Command, Result>
+    public sealed class Handler(AppDbContext db)
     {
-        public async Task<Result> Handle(Command request, CancellationToken ct)
+        public async Task<Result> HandleAsync(Command command, CancellationToken ct)
         {
-            var product = await db.Products.FindAsync([request.ProductId], ct)
-                ?? throw new NotFoundException(nameof(Product), request.ProductId);
+            var product = await db.Products.FindAsync([command.ProductId], ct)
+                ?? throw new NotFoundException(nameof(Product), command.ProductId);
 
-            if (product.StockQuantity < request.Quantity)
+            if (product.StockQuantity < command.Quantity)
                 throw new ValidationException("Insufficient stock");
 
             var order = new Order
             {
                 Id = Guid.NewGuid(),
                 ProductId = product.Id,
-                Quantity = request.Quantity,
+                Quantity = command.Quantity,
                 UnitPrice = product.Price,
-                ShippingAddress = request.ShippingAddress,
+                ShippingAddress = command.ShippingAddress,
                 Status = OrderStatus.Submitted,
                 CreatedAt = DateTime.UtcNow
             };
 
             db.Orders.Add(order);
-            product.StockQuantity -= request.Quantity;
+            product.StockQuantity -= command.Quantity;
             await db.SaveChangesAsync(ct);
 
             return new Result(order.Id, order.Quantity * order.UnitPrice);
@@ -175,9 +175,9 @@ public static class CreateOrder
 
     public static void MapEndpoints(IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/orders", async (Command command, IMediator mediator) =>
+        app.MapPost("/api/orders", async (Command command, ISender sender) =>
         {
-            var result = await mediator.Send(command);
+            var result = await sender.SendAsync(command);
             return Results.Created($"/api/orders/{result.OrderId}", result);
         });
     }
@@ -203,7 +203,7 @@ HTTP POST /api/orders
 Minimal API endpoint (defined in CreateOrder.MapEndpoints)
     │  deserialises body → CreateOrder.Command
     ▼
-MediatR.Send(Command)
+Mediator dispatches Command
     │
     ▼
 ValidationBehaviour (Shared/)
@@ -220,7 +220,7 @@ CreateOrder.Result returned
 Results.Created(url, result)
 ```
 
-There are no layers to traverse. The handler is the feature. It queries what it needs, does what it needs to do, and returns the result. Compare this with [STR003](STR003%20-%20full-clean-architecture.md) where the same operation crosses Controller → MediatR → Handler → Repository → DbContext.
+There are no layers to traverse. The handler is the feature. It queries what it needs, does what it needs to do, and returns the result. Compare this with [STR003](STR003%20-%20full-clean-architecture.md) where the same operation crosses Controller → Mediator → Handler → Repository → DbContext.
 
 ## Where Business Logic Lives
 
@@ -298,9 +298,9 @@ public class CreateOrderTests(CustomWebApplicationFactory factory)
 
 1. **Feature folders that are just reorganised layers.** A feature folder containing `OrderController.cs`, `OrderService.cs`, `OrderRepository.cs` is N-Tier in a trench coat. The point is to have one file per operation, not one folder per entity with layered files inside.
 
-2. **Shared abstractions that defeat the purpose.** Creating `ISliceHandler<TRequest, TResponse>`, `SliceHandlerBase<T>`, or a custom pipeline that every feature must inherit from. Vertical slices are about independence — shared base classes create coupling. Use MediatR and let each handler be its own thing.
+2. **Shared abstractions that defeat the purpose.** Creating `ISliceHandler<TRequest, TResponse>`, `SliceHandlerBase<T>`, or a custom pipeline that every feature must inherit from. Vertical slices are about independence — shared base classes create coupling. Let each handler be its own thing.
 
-3. **Features calling other features.** `CreateOrder.Handler` calls `mediator.Send(new GetProductById.Query(productId))` to get the product. Don't do this — query the database directly. Features are independent slices, not a service mesh.
+3. **Features calling other features.** `CreateOrder.Handler` dispatches `new GetProductById.Query(productId)` via the mediator to get the product. Don't do this — query the database directly. Features are independent slices, not a service mesh.
 
 4. **No shared Domain/ at all.** Every feature defines its own `Order` class. Now you have three different `Order` types mapping to the same table. Entity classes go in `Domain/` because they represent shared database structure.
 
