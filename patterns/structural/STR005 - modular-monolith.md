@@ -10,14 +10,14 @@ Independent modules within one deployable, each with clear boundaries, own data,
 - Multiple distinct business domains within one product that need to evolve independently
 - You want microservice-like autonomy without the operational overhead of distributed systems
 - The system is complex enough that a single codebase without boundaries would devolve into a big ball of mud
-- You want the **option** to extract services later — modular monolith is the best stepping stone to microservices ([STR007](STR007%20-%20microservices.md))
+- You want the **option** to extract services later — modular monolith is the best stepping stone to microservices ([STR007](../structural/STR007%20-%20microservices.md))
 - Deployment as a single unit is acceptable or even desirable
 
 ## When NOT to Use
 
-- Small apps (under ~15 endpoints) where module boundaries add overhead without benefit — use [STR001](STR001%20-%20n-tier.md) or [STR002](STR002%20-%20clean-architecture-lite.md)
+- Small apps (under ~15 endpoints) where module boundaries add overhead without benefit — use [STR001](../structural/STR001%20-%20n-tier.md) or [STR002](../structural/STR002%20-%20clean-architecture-lite.md)
 - The domain is genuinely a single cohesive thing — forced module boundaries create artificial seams
-- You need independent deployment **now** — use microservices ([STR007](STR007%20-%20microservices.md))
+- You need independent deployment **now** — use microservices ([STR007](../structural/STR007%20-%20microservices.md))
 - Teams can't agree on or enforce module boundaries — a modular monolith without discipline becomes a distributed monolith in one process
 
 ## Solution Structure
@@ -99,7 +99,7 @@ MyApp/
     └── MyApp.IntegrationTests/
 ```
 
-Each **module** is its own class library project. Internally, each module can use whatever structure fits — the Orders module shown above uses a mini Clean Architecture (Domain/Application/Infrastructure/Api), but a simpler module might use Vertical Slices ([STR004](STR004%20-%20vertical-slice.md)) internally.
+Each **module** is its own class library project. Internally, each module can use whatever structure fits — the Orders module shown above uses a mini Clean Architecture (Domain/Application/Infrastructure/Api), but a simpler module might use Vertical Slices ([STR004](../structural/STR004%20-%20vertical-slice.md)) internally.
 
 **MyApp.Host** — the ASP.NET Core application. It references all modules and wires them together at startup. Contains no business logic.
 

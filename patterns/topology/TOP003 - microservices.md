@@ -1,21 +1,35 @@
 # Microservices
 
-> **Ref:** `STR007` | **Category:** Structural
+> **Ref:** `TOP003` | **Category:** Topology
 
 Independently deployable services, each owning its data and communicating through well-defined APIs and asynchronous messaging.
+
+## How It Differs from Other Topologies
+
+| | Monolith ([TOP001](TOP001%20-%20monolith.md)) | SOA ([TOP002](TOP002%20-%20service-oriented-architecture.md)) | Microservices (TOP003) |
+|:---|:---|:---|:---|
+| Service count | 1 | Few (3–10) | Many (10+) |
+| Service granularity | N/A | Coarse (broad business capability) | Fine (single bounded context) |
+| Database | One | Shared or per-service | Always per-service |
+| Communication | In-process | Synchronous + ESB/messaging | Async-first, lightweight HTTP/gRPC |
+| Data ownership | Single owner | Negotiated | Strict per-service |
+| Deploy independence | None | Moderate | Full |
+| Operational overhead | Low | Medium | High |
+
+The key difference from SOA ([TOP002](TOP002%20-%20service-oriented-architecture.md)): microservices are **fine-grained** (one bounded context per service), **always own their data** (no shared databases), and **prefer asynchronous communication** (events over request/response). SOA services are coarser, may share databases, and often coordinate through a centralised bus.
 
 ## When to Use
 
 - **15+ developers** across multiple teams, each needing to deploy independently on their own cadence
 - Distinct bounded contexts with genuinely different scaling requirements (orders: high write volume; product catalogue: high read volume, rare writes)
 - Organisational structure demands service ownership — Conway's Law is in full effect and you're leaning into it
-- You've already built a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) and have evidence that specific modules need independent deployment, scaling, or technology choices. The modular monolith gave you well-defined module boundaries — each module is now a candidate for extraction into a service
+- You've already built a modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) and have evidence that specific modules need independent deployment, scaling, or technology choices. The modular monolith gave you well-defined module boundaries — each module is now a candidate for extraction into a service
 - You can invest in the infrastructure: CI/CD per service, centralised logging, distributed tracing, container orchestration
-- You're extracting incrementally. The ideal path is: monolith → modular monolith ([STR005](STR005%20-%20modular-monolith.md)) → extract modules to services one at a time as justified. This gives you proven boundaries before you pay the distributed systems tax
+- You're extracting incrementally. The ideal path is: monolith → modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) → extract modules to services one at a time as justified. This gives you proven boundaries before you pay the distributed systems tax
 
 ## When NOT to Use
 
-- **Under ~15 developers.** The coordination overhead of microservices will outrun your team's capacity. Use a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) instead.
+- **Under ~15 developers.** The coordination overhead of microservices will outrun your team's capacity. Use a modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) instead.
 - You can't invest in infrastructure. Without proper CI/CD, observability, and orchestration, microservices become a liability.
 - You're searching for product-market fit. Microservices slow down pivoting — you'll spend time re-wiring service boundaries instead of iterating on features.
 - The domains aren't actually independent. If every user request touches 5 services in a synchronous chain, you have a distributed monolith with network latency.
@@ -97,7 +111,7 @@ MyApp/
     └── MyApp.EndToEnd.Tests/
 ```
 
-**Each service** is an independently deployable ASP.NET Core application with its own `Program.cs`, `Dockerfile`, and database context. Internally, each service can use any pattern — the Orders service above uses Vertical Slices ([STR004](STR004%20-%20vertical-slice.md)) because it's feature-heavy. A simpler service might use N-Tier ([STR001](STR001%20-%20n-tier.md)). A complex domain service might use Hexagonal ([STR006](STR006%20-%20hexagonal.md)).
+**Each service** is an independently deployable ASP.NET Core application with its own `Program.cs`, `Dockerfile`, and database context. Internally, each service can use any pattern — the Orders service above uses Vertical Slices ([STR004](../structural/STR004%20-%20vertical-slice.md)) because it's feature-heavy. A simpler service might use N-Tier ([STR001](../structural/STR001%20-%20n-tier.md)). A complex domain service might use Hexagonal ([STR006](../structural/STR006%20-%20hexagonal.md)).
 
 **MyApp.Contracts** — shared event definitions and API DTOs. This is a NuGet package (or project reference in mono-repo). Keep it thin — only types that cross service boundaries.
 
@@ -354,7 +368,7 @@ If payment fails:
 - Each service is a bounded context. It owns its domain model, its data, and its business rules. The Orders service knows everything about order lifecycle. The Inventory service knows everything about stock management.
 - **Cross-service business processes** use sagas or choreography. No service contains rules about another service's domain.
 - **If you find business logic in the gateway, contracts, or shared libraries, you have a problem.** Business logic belongs in the service that owns that domain concept.
-- **Each service picks its own internal pattern.** A simple CRUD notification service might use [STR001](STR001%20-%20n-tier.md). An order processing service with complex rules might use [STR006](STR006%20-%20hexagonal.md). Don't force a single internal architecture across all services.
+- **Each service picks its own internal pattern.** A simple CRUD notification service might use [STR001](../structural/STR001%20-%20n-tier.md). An order processing service with complex rules might use [STR006](../structural/STR006%20-%20hexagonal.md). Don't force a single internal architecture across all services.
 
 ## API Gateway / BFF
 
@@ -467,7 +481,7 @@ public sealed class OrderFulfilmentTests : IAsyncLifetime
 
 4. **No contract testing.** The Orders service changes `OrderPlacedEvent` and breaks 3 consumers. Without contract tests, you find out in production. Add contract tests to CI — they're cheap and catch breaking changes early.
 
-5. **Premature microservices.** Starting with microservices on day one. Build a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) first. Extract services only when you have evidence: a module needs independent scaling, independent deployment, or a different technology choice.
+5. **Premature microservices.** Starting with microservices on day one. Build a modular monolith ([STR005](../structural/STR005%20-%20modular-monolith.md)) first. Extract services only when you have evidence: a module needs independent scaling, independent deployment, or a different technology choice.
 
 6. **Too-fine-grained services.** A service per entity: `OrderService`, `OrderItemService`, `OrderStatusService`. Services should align with bounded contexts — cohesive business capabilities — not database tables. A "service" with one endpoint is probably just a function.
 
