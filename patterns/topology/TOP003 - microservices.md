@@ -499,9 +499,9 @@ public sealed class OrderFulfilmentTests : IAsyncLifetime
 
 ## Related Packages
 
-- **Messaging:** MassTransit · NServiceBus · Wolverine · Brighter
-- **Service discovery / orchestration:** .NET Aspire
-- **API gateway:** YARP (reverse proxy)
-- **Resilience:** Microsoft.Extensions.Http.Resilience · Polly
-- **Contracts / serialisation:** System.Text.Json · MessagePack · Protobuf
-- **Testing:** xUnit, NUnit · Testcontainers · Aspire.Hosting.Testing
+- **Messaging:** [MassTransit](https://github.com/MassTransit/MassTransit) · [NServiceBus](https://github.com/Particular/NServiceBus) · [Wolverine](https://github.com/JasperFx/wolverine) · [Brighter](https://github.com/BrighterCommand/Brighter)
+- **Service discovery / orchestration:** [.NET Aspire](https://github.com/dotnet/aspire)
+- **API gateway:** [YARP](https://github.com/microsoft/reverse-proxy) (reverse proxy)
+- **Resilience:** [Microsoft.Extensions.Http.Resilience](https://www.nuget.org/packages/Microsoft.Extensions.Http.Resilience) · [Polly](https://github.com/App-vNext/Polly)
+- **Contracts / serialisation:** [System.Text.Json](https://www.nuget.org/packages/System.Text.Json) · MessagePack · Protobuf
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Aspire.Hosting.Testing](https://www.nuget.org/packages/Aspire.Hosting.Testing)

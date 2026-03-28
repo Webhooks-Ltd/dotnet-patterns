@@ -248,7 +248,7 @@ public async Task CreateOrder_ValidRequest_Returns201()
 
 ## Related Packages
 
-- **Azure Functions:** Microsoft.Azure.Functions.Worker · Microsoft.Azure.Functions.Worker.Extensions.*
-- **AWS Lambda:** Amazon.Lambda.AspNetCoreServer · Amazon.Lambda.RuntimeSupport
-- **Durable workflows:** Microsoft.Azure.Functions.Worker.Extensions.DurableTask
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions
+- **Azure Functions:** [Microsoft.Azure.Functions.Worker](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker) · [Microsoft.Azure.Functions.Worker.Extensions.*](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.Http)
+- **AWS Lambda:** [Amazon.Lambda.AspNetCoreServer](https://www.nuget.org/packages/Amazon.Lambda.AspNetCoreServer) · [Amazon.Lambda.RuntimeSupport](https://www.nuget.org/packages/Amazon.Lambda.RuntimeSupport)
+- **Durable workflows:** [Microsoft.Azure.Functions.Worker.Extensions.DurableTask](https://www.nuget.org/packages/Microsoft.Azure.Functions.Worker.Extensions.DurableTask)
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions)

@@ -170,7 +170,7 @@ Use aggregation sparingly. If most endpoints need data from multiple services, t
 
 ## Related Packages
 
-- **Reverse proxy:** YARP (Yet Another Reverse Proxy)
-- **Rate limiting:** System.Threading.RateLimiting (built-in .NET 7+)
-- **Authentication:** Microsoft.AspNetCore.Authentication.JwtBearer
-- **Service discovery:** .NET Aspire
+- **Reverse proxy:** [YARP](https://github.com/microsoft/reverse-proxy) (Yet Another Reverse Proxy)
+- **Rate limiting:** [System.Threading.RateLimiting](https://www.nuget.org/packages/System.Threading.RateLimiting) (built-in .NET 7+)
+- **Authentication:** [Microsoft.AspNetCore.Authentication.JwtBearer](https://www.nuget.org/packages/Microsoft.AspNetCore.Authentication.JwtBearer)
+- **Service discovery:** [.NET Aspire](https://github.com/dotnet/aspire)

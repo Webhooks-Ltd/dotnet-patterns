@@ -596,7 +596,7 @@ tests/
 
 ## Related Packages
 
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
-- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
-- **Architecture testing:** NetArchTest · ArchUnitNET
-- **Mapping:** Mapster · AutoMapper
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Bogus](https://github.com/bchavez/Bogus)
+- **Validation:** [FluentValidation](https://github.com/FluentValidation/FluentValidation) · [System.ComponentModel.DataAnnotations](https://www.nuget.org/packages/System.ComponentModel.Annotations)
+- **Architecture testing:** [NetArchTest](https://github.com/BenMorris/NetArchTest) · [ArchUnitNET](https://github.com/TNG/ArchUnitNET)
+- **Mapping:** [Mapster](https://github.com/MapsterMapper/Mapster) · [AutoMapper](https://github.com/AutoMapper/AutoMapper)

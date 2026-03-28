@@ -498,8 +498,8 @@ public void Cancel_ShippedOrder_ThrowsDomainException()
 
 ## Related Packages
 
-- **Event store:** Marten (PostgreSQL) · EventStoreDB · Equinox
-- **Projections:** Marten async daemon · EventStoreDB projections
-- **Messaging (for publishing events to other services):** MassTransit · NServiceBus · Wolverine
-- **Serialisation:** System.Text.Json · Newtonsoft.Json (for legacy upcasting)
-- **Testing:** xUnit, NUnit · FluentAssertions · Testcontainers
+- **Event store:** [Marten](https://github.com/JasperFx/marten) (PostgreSQL) · [EventStoreDB](https://github.com/EventStore/EventStore) · [Equinox](https://github.com/jet/equinox)
+- **Projections:** [Marten](https://github.com/JasperFx/marten) async daemon · [EventStoreDB](https://github.com/EventStore/EventStore) projections
+- **Messaging (for publishing events to other services):** [MassTransit](https://github.com/MassTransit/MassTransit) · [NServiceBus](https://github.com/Particular/NServiceBus) · [Wolverine](https://github.com/JasperFx/wolverine)
+- **Serialisation:** [System.Text.Json](https://www.nuget.org/packages/System.Text.Json) · Newtonsoft.Json (for legacy upcasting)
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet)

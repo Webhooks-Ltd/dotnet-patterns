@@ -435,8 +435,8 @@ What blocks this in practice: shared database tables, `TransactionScope` spannin
 
 ## Related Packages
 
-- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
-- **Messaging / Event bus:** MassTransit · NServiceBus · Wolverine · Brighter
-- **Validation:** FluentValidation
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
-- **Architecture testing:** NetArchTest · ArchUnitNET
+- **Mediator:** [MediatR](https://github.com/jbogard/MediatR) · [Wolverine](https://github.com/JasperFx/wolverine) · [Mediator](https://github.com/martinothamar/Mediator) (source-generated)
+- **Messaging / Event bus:** [MassTransit](https://github.com/MassTransit/MassTransit) · [NServiceBus](https://github.com/Particular/NServiceBus) · [Wolverine](https://github.com/JasperFx/wolverine) · [Brighter](https://github.com/BrighterCommand/Brighter)
+- **Validation:** [FluentValidation](https://github.com/FluentValidation/FluentValidation)
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Bogus](https://github.com/bchavez/Bogus)
+- **Architecture testing:** [NetArchTest](https://github.com/BenMorris/NetArchTest) · [ArchUnitNET](https://github.com/TNG/ArchUnitNET)

@@ -201,7 +201,7 @@ Business rules (validation, state transitions, calculations) stay in the backend
 
 ## Related Packages
 
-- **Reverse proxy:** YARP
-- **HTTP clients:** Microsoft.Extensions.Http · Microsoft.Extensions.Http.Resilience
-- **Authentication:** Microsoft.AspNetCore.Authentication.Cookies (web BFF) · Microsoft.AspNetCore.Authentication.JwtBearer (mobile BFF)
-- **Service discovery:** .NET Aspire
+- **Reverse proxy:** [YARP](https://github.com/microsoft/reverse-proxy)
+- **HTTP clients:** [Microsoft.Extensions.Http](https://www.nuget.org/packages/Microsoft.Extensions.Http) · [Microsoft.Extensions.Http.Resilience](https://www.nuget.org/packages/Microsoft.Extensions.Http.Resilience)
+- **Authentication:** [Microsoft.AspNetCore.Authentication.Cookies](https://www.nuget.org/packages/Microsoft.AspNetCore.Authentication.Cookies) (web BFF) · [Microsoft.AspNetCore.Authentication.JwtBearer](https://www.nuget.org/packages/Microsoft.AspNetCore.Authentication.JwtBearer) (mobile BFF)
+- **Service discovery:** [.NET Aspire](https://github.com/dotnet/aspire)

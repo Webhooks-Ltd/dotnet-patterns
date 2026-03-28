@@ -359,6 +359,6 @@ Level 2 introduces a propagation delay between the write and read stores. You ne
 
 ## Related Packages
 
-- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
-- **Read-side data access:** Dapper · EF Core (with AsNoTracking projections)
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers
+- **Mediator:** [MediatR](https://github.com/jbogard/MediatR) · [Wolverine](https://github.com/JasperFx/wolverine) · [Mediator](https://github.com/martinothamar/Mediator) (source-generated)
+- **Read-side data access:** [Dapper](https://github.com/DapperLib/Dapper) · EF Core (with AsNoTracking projections)
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet)

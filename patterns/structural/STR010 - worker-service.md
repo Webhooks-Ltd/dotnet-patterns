@@ -342,8 +342,8 @@ public async Task ProcessAsync_CompletesOrder_WhenPaymentConfirmed()
 
 ## Related Packages
 
-- **Hosting:** Microsoft.Extensions.Hosting.WindowsServices · Microsoft.Extensions.Hosting.Systemd
-- **Messaging:** MassTransit · NServiceBus · Wolverine · Brighter
-- **Scheduling:** Quartz.NET · Hangfire · Cronos
+- **Hosting:** [Microsoft.Extensions.Hosting.WindowsServices](https://www.nuget.org/packages/Microsoft.Extensions.Hosting.WindowsServices) · [Microsoft.Extensions.Hosting.Systemd](https://www.nuget.org/packages/Microsoft.Extensions.Hosting.Systemd)
+- **Messaging:** [MassTransit](https://github.com/MassTransit/MassTransit) · [NServiceBus](https://github.com/Particular/NServiceBus) · [Wolverine](https://github.com/JasperFx/wolverine) · [Brighter](https://github.com/BrighterCommand/Brighter)
+- **Scheduling:** [Quartz.NET](https://github.com/quartznet/quartznet) · [Hangfire](https://github.com/HangfireIO/Hangfire) · [Cronos](https://github.com/HangfireIO/Cronos)
 - **Health checks:** AspNetCore.HealthChecks.*
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · Testcontainers · Microsoft.Extensions.TimeProvider.Testing
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Microsoft.Extensions.TimeProvider.Testing](https://www.nuget.org/packages/Microsoft.Extensions.TimeProvider.Testing)

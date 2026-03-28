@@ -474,6 +474,6 @@ The hexagonal shape makes testing natural: swap driven adapters at any level. Do
 
 ## Related Packages
 
-- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
-- **HTTP mocking:** WireMock.Net
-- **Mapping:** Mapster · AutoMapper
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [NSubstitute](https://github.com/nsubstitute/NSubstitute), [Moq](https://github.com/devlooped/moq) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Bogus](https://github.com/bchavez/Bogus)
+- **HTTP mocking:** [WireMock.Net](https://github.com/WireMock-Net/WireMock.Net)
+- **Mapping:** [Mapster](https://github.com/MapsterMapper/Mapster) · [AutoMapper](https://github.com/AutoMapper/AutoMapper)

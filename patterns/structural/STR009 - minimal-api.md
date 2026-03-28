@@ -366,6 +366,6 @@ public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
 
 ## Related Packages
 
-- **Validation:** FluentValidation · MiniValidation
-- **OpenAPI:** Swashbuckle · NSwag · Microsoft.AspNetCore.OpenApi
-- **Testing:** xUnit, NUnit · FluentAssertions · Testcontainers · Bogus
+- **Validation:** [FluentValidation](https://github.com/FluentValidation/FluentValidation) · [MiniValidation](https://github.com/DamianEdwards/MiniValidation)
+- **OpenAPI:** [Swashbuckle](https://github.com/domaindrivendev/Swashbuckle.AspNetCore) · [NSwag](https://github.com/RicoSuter/NSwag) · [Microsoft.AspNetCore.OpenApi](https://www.nuget.org/packages/Microsoft.AspNetCore.OpenApi)
+- **Testing:** [xUnit](https://github.com/xunit/xunit), [NUnit](https://github.com/nunit/nunit) · [FluentAssertions](https://github.com/fluentassertions/fluentassertions) · [Testcontainers](https://github.com/testcontainers/testcontainers-dotnet) · [Bogus](https://github.com/bchavez/Bogus)
