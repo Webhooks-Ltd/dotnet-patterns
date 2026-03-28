@@ -2,7 +2,7 @@
 
 > **Ref:** `STR009` | **Category:** Structural
 
-Endpoint-focused architecture using .NET Minimal APIs, organised by endpoint classes or static methods with no controllers, no MVC overhead, and explicit route registration.
+Lightweight API architecture using .NET's Minimal API pipeline — no MVC controllers, no model binding pipeline, no action filters. Routes are registered explicitly via `MapGet`/`MapPost` and organised by route groups.
 
 ## When to Use
 
@@ -32,14 +32,8 @@ MyApp/
         ├── appsettings.json
         │
         ├── Endpoints/
-        │   ├── Orders/
-        │   │   ├── CreateOrderEndpoint.cs
-        │   │   ├── GetOrderByIdEndpoint.cs
-        │   │   ├── ListOrdersEndpoint.cs
-        │   │   └── UpdateOrderStatusEndpoint.cs
-        │   └── Products/
-        │       ├── GetProductByIdEndpoint.cs
-        │       └── ListProductsEndpoint.cs
+        │   ├── OrderEndpoints.cs
+        │   └── ProductEndpoints.cs
         │
         ├── Services/
         │   ├── IOrderService.cs
@@ -68,7 +62,7 @@ MyApp/
             └── GlobalExceptionHandler.cs
 ```
 
-**Endpoints/** — One class per endpoint, grouped by resource. Each endpoint class has a single static method that handles one HTTP operation. This is the structural replacement for controllers.
+**Endpoints/** — One file per resource, each containing a static class with an extension method that registers all routes for that resource via `MapGroup`. This is the structural replacement for controllers.
 
 **Services/** — Business logic, same as [STR001](STR001%20-%20n-tier.md). Endpoints are thin — they call services.
 
@@ -100,9 +94,7 @@ graph TD
 
 | Element | Convention | Example |
 |---------|-----------|---------|
-| Endpoint class | `{Verb}{Entity}Endpoint` | `CreateOrderEndpoint` |
-| Endpoint method | `HandleAsync` | `HandleAsync` |
-| Endpoint folder | plural resource noun | `Orders/`, `Products/` |
+| Endpoint file | `{Resource}Endpoints` | `OrderEndpoints` |
 | Route group | plural, lowercase | `/api/orders` |
 | Request DTO | `{Verb}{Entity}Request` | `CreateOrderRequest` |
 | Response DTO | `{Entity}Response` | `OrderResponse` |
@@ -111,19 +103,23 @@ graph TD
 
 ## Key Abstractions
 
-An endpoint class. Use `TypedResults` instead of `Results` — the return type encodes the possible responses, enabling automatic OpenAPI metadata generation without manual `.Produces<T>()` calls:
+The primary unit of organisation is the **route group per resource**, defined in a static class with an extension method. Each resource gets one file. Use `TypedResults` instead of `Results` — the return type encodes the possible responses, enabling automatic OpenAPI metadata generation without manual `.Produces<T>()` calls:
 
 ```csharp
-public static class CreateOrderEndpoint
+// Endpoints/OrderEndpoints.cs
+public static class OrderEndpoints
 {
-    public static void Map(RouteGroupBuilder group)
+    public static void Map(IEndpointRouteBuilder app)
     {
-        group.MapPost("/", HandleAsync)
-            .WithName("CreateOrder")
-            .AddEndpointFilter<ValidationFilter<CreateOrderRequest>>();
+        var group = app.MapGroup("/orders")
+            .WithTags("Orders");
+
+        group.MapPost("/", CreateAsync).WithName("CreateOrder");
+        group.MapGet("/{id:guid}", GetByIdAsync).WithName("GetOrderById");
+        group.MapGet("/", ListAsync).WithName("ListOrders");
     }
 
-    private static async Task<Results<Created<OrderResponse>, ValidationProblem>> HandleAsync(
+    private static async Task<Results<Created<OrderResponse>, ValidationProblem>> CreateAsync(
         CreateOrderRequest request,
         IOrderService orderService,
         CancellationToken ct)
@@ -131,59 +127,41 @@ public static class CreateOrderEndpoint
         var order = await orderService.CreateAsync(request, ct);
         return TypedResults.Created($"/api/orders/{order.Id}", order);
     }
+
+    private static async Task<Results<Ok<OrderResponse>, NotFound>> GetByIdAsync(
+        Guid id,
+        IOrderService orderService,
+        CancellationToken ct)
+    {
+        var order = await orderService.GetByIdAsync(id, ct);
+        return order is null
+            ? TypedResults.NotFound()
+            : TypedResults.Ok(order);
+    }
+
+    private static async Task<Ok<IReadOnlyList<OrderResponse>>> ListAsync(
+        IOrderService orderService,
+        CancellationToken ct)
+    {
+        var orders = await orderService.ListAsync(ct);
+        return TypedResults.Ok(orders);
+    }
 }
 ```
 
-Registration in `Program.cs` using route groups. Each resource gets a group that owns its prefix, tags, and shared filters — individual endpoints never repeat this configuration:
+`Program.cs` is minimal — register route groups, not individual routes:
 
 ```csharp
 var app = builder.Build();
 
 var api = app.MapGroup("/api");
-
-var orders = api.MapGroup("/orders")
-    .WithTags("Orders");
-
-CreateOrderEndpoint.Map(orders);
-GetOrderByIdEndpoint.Map(orders);
-ListOrdersEndpoint.Map(orders);
-UpdateOrderStatusEndpoint.Map(orders);
-
-var products = api.MapGroup("/products")
-    .WithTags("Products");
-
-GetProductByIdEndpoint.Map(products);
-ListProductsEndpoint.Map(products);
+OrderEndpoints.Map(api);
+ProductEndpoints.Map(api);
 
 app.Run();
 ```
 
-For larger projects, extract group registration into extension methods to keep `Program.cs` clean:
-
-```csharp
-public static class OrderEndpoints
-{
-    public static RouteGroupBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
-    {
-        var group = app.MapGroup("/orders")
-            .WithTags("Orders");
-
-        CreateOrderEndpoint.Map(group);
-        GetOrderByIdEndpoint.Map(group);
-        ListOrdersEndpoint.Map(group);
-        UpdateOrderStatusEndpoint.Map(group);
-
-        return group;
-    }
-}
-
-// Program.cs becomes:
-var api = app.MapGroup("/api");
-api.MapOrderEndpoints();
-api.MapProductEndpoints();
-```
-
-**Avoid reflection-based auto-discovery.** Patterns that scan assemblies for an `IEndpoint` interface and invoke `Map` via reflection lose compile-time safety, make debugging harder, and hide endpoint registration order. The extension method approach above is explicit, refactor-safe, and costs one line per resource group in `Program.cs`.
+This is structurally similar to a controller — one class groups related operations for a resource, with shared route prefix and tags. The difference is the pipeline: no MVC model binding, no action filters, no base class. The route group is explicit configuration rather than convention.
 
 Endpoint filter (replaces MVC action filters). Note: endpoint filters using constructor injection must be added with `.AddEndpointFilter<T>()` which resolves `T` from DI, or alternatively use the factory overload for inline filters:
 
@@ -233,7 +211,7 @@ group.AddEndpointFilterFactory((factoryContext, next) =>
 POST /api/orders
     │
     ▼
-Minimal API route match → CreateOrderEndpoint.HandleAsync
+Minimal API route match → OrderEndpoints.CreateAsync
     │  DI injects IOrderService, deserialises CreateOrderRequest
     ▼
 IOrderService.CreateAsync(request)
@@ -344,7 +322,7 @@ public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
 
 ## Common Mistakes
 
-1. **All endpoints in `Program.cs`.** A `Program.cs` with 200 lines of `app.MapGet`/`app.MapPost` calls. Extract endpoints into classes or use route groups. `Program.cs` should register groups, not individual routes.
+1. **All endpoints in `Program.cs`.** A `Program.cs` with 200 lines of `app.MapGet`/`app.MapPost` calls. Extract into route group classes — one per resource. `Program.cs` should register groups, not individual routes.
 
 2. **Business logic in endpoint handlers.** The handler validates stock, calculates totals, sends emails. Move this to a service. The endpoint handler calls one service method and returns the result.
 
