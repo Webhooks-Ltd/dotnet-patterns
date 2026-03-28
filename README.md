@@ -17,6 +17,7 @@ A reference library of solution-level architecture patterns for .NET/C# projects
 | [`STR009`](patterns/STR009%20-%20minimal-api.md) | Minimal API | Endpoint-focused, no controllers, explicit route registration |
 | [`STR010`](patterns/STR010%20-%20worker-service.md) | Worker Service | Background processing — queue consumers, scheduled jobs, long-running services |
 | [`DSG001`](patterns/DSG001%20-%20cqrs.md) | CQRS | Separate read/write models — applies within any structural pattern |
+| [`DSG002`](patterns/DSG002%20-%20event-sourcing.md) | Event Sourcing + CQRS | Events as source of truth, projections for reads — builds on DSG001 |
 
 ## Categories
 
@@ -68,6 +69,8 @@ graph LR
     DSG001[DSG001 CQRS] -.- STR003
     DSG001 -.- STR004
     DSG001 -.- STR008
+    DSG001 --> DSG002[DSG002 Event Sourcing]
+    click DSG002 "patterns/DSG002 - event-sourcing.md"
     click STR001 "patterns/STR001 - n-tier.md"
     click STR002 "patterns/STR002 - clean-architecture-lite.md"
     click STR003 "patterns/STR003 - full-clean-architecture.md"

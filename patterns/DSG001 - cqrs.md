@@ -49,7 +49,7 @@ graph LR
 
 ### Level 2: Separate Read Store
 
-Commands write to the primary database. Domain events trigger projections that update a dedicated read store (denormalised tables, materialised views, or a completely different database).
+Commands write to the primary database — **current state is still stored as normal rows**. Domain events are raised as transient signals that trigger projections to update a dedicated read store. The events are a side effect of state changes, not the source of truth. If you want events to *be* the source of truth (no current-state tables at all), that's Event Sourcing ([DSG002](DSG002%20-%20event-sourcing.md)) — a different pattern that composes well with CQRS but is not required by it.
 
 ```mermaid
 graph LR
