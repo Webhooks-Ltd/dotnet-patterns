@@ -32,18 +32,15 @@ A BFF and an API gateway can coexist. The gateway handles cross-cutting infrastr
 
 ```mermaid
 graph TD
-    Web[Web SPA] --> GW[API Gateway]
-    Mobile[Mobile App] --> GW
-    ThirdParty[Third-Party] --> GW
-    GW --> WebBFF[Web BFF]
-    GW --> MobileBFF[Mobile BFF]
-    GW --> PublicAPI[Public API]
+    Web[Web SPA] --> WebBFF[Web BFF]
+    Mobile[Mobile App] --> MobileBFF[Mobile BFF]
     WebBFF --> S1[Orders Service]
     WebBFF --> S2[Inventory Service]
     MobileBFF --> S1
     MobileBFF --> S3[Notifications Service]
-    PublicAPI --> S1
 ```
+
+A BFF and an API gateway ([NET001](NET001%20-%20api-gateway.md)) can coexist — the gateway handles cross-cutting infrastructure (auth, rate limiting), then routes to the appropriate BFF. But a gateway is not required; BFFs can face clients directly.
 
 ## Solution Structure
 
