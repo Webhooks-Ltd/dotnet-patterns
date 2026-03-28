@@ -1,6 +1,6 @@
 # Full Clean Architecture
 
-> **Ref:** `LAY-003` | **Category:** Layered
+> **Ref:** `STR003` | **Category:** Structural
 
 Multi-project solution with Domain, Application, Infrastructure, and Web projects enforcing strict dependency inversion through project references and the compiler.
 
@@ -8,7 +8,7 @@ Multi-project solution with Domain, Application, Infrastructure, and Web project
 
 - **4+ developers**, especially multiple teams touching different layers
 - Rich domain model with complex business rules, invariants, and workflows
-- You need **compile-time enforcement** — convention-based boundaries (LAY-002) aren't holding up as the team grows
+- You need **compile-time enforcement** — convention-based boundaries ([STR002](STR002%20-%20clean-architecture-lite.md)) aren't holding up as the team grows
 - Multiple deployment targets share the domain: an API, a background worker, a CLI tool
 - The domain is the competitive advantage and must be protected from infrastructure leakage
 - Long-lived application (5+ years) where architectural erosion is a real risk
@@ -16,7 +16,7 @@ Multi-project solution with Domain, Application, Infrastructure, and Web project
 ## When NOT to Use
 
 - CRUD-dominant applications — the four-project ceremony will slow you down for no benefit
-- Solo developer or small team (1–3) — use LAY-002, you don't need the compiler to enforce discipline you can see
+- Solo developer or small team (1–3) — use [STR002](STR002%20-%20clean-architecture-lite.md), you don't need the compiler to enforce discipline you can see
 - Rapid prototyping or MVP phase — get the product right first, refactor to this later
 - If every "entity" is just a bag of properties with no methods, you have an anaemic model and four projects of indirection for nothing
 
@@ -136,20 +136,23 @@ MyApp/
 ## Dependency Rules
 
 ```
-                    ┌──────────────┐
-                    │  MyApp.Web   │
-                    └──────┬───────┘
-                           │ references
-              ┌────────────┼────────────┐
-              ▼                         ▼
-┌──────────────────────┐   ┌────────────────────────┐
-│  MyApp.Application   │   │  MyApp.Infrastructure  │
-└──────────┬───────────┘   └──────────┬─────────────┘
-           │ references               │ references
-           ▼                          ▼
-        ┌─────────────────────────────────┐
-        │         MyApp.Domain            │
-        └─────────────────────────────────┘
+                  ┌──────────────┐
+                  │  MyApp.Web   │
+                  └──────┬───────┘
+                         │ references
+            ┌────────────┼────────────┐
+            ▼                         ▼
+┌────────────────────┐   ┌──────────────────────┐
+│ MyApp.Application  │   │ MyApp.Infrastructure │
+└─────────┬──────────┘   └──┬────────────┬──────┘
+          │                 │            │
+          │ references      │ references │ references
+          ▼                 ▼            ▼
+        ┌──────────────────────────────────┐
+        │          MyApp.Domain            │
+        └──────────────────────────────────┘
+
+Infrastructure references BOTH Application and Domain.
 ```
 
 **The iron rules:**
@@ -392,7 +395,7 @@ tests/
 
 ## Common Mistakes
 
-1. **Anaemic domain model.** Entities with only public properties and no methods. If `Order` has `public OrderStatus Status { get; set; }` with no `Submit()` method enforcing rules, you've built four projects of indirection around a CRUD app. Either add real behaviour or use LAY-001.
+1. **Anaemic domain model.** Entities with only public properties and no methods. If `Order` has `public OrderStatus Status { get; set; }` with no `Submit()` method enforcing rules, you've built four projects of indirection around a CRUD app. Either add real behaviour or use [STR001](STR001%20-%20n-tier.md).
 
 2. **Business logic in handlers.** The handler checks `if (product.StockQuantity < request.Quantity)` instead of calling `order.AddItem(product, quantity)` which does the check internally. Move the logic into the entity.
 

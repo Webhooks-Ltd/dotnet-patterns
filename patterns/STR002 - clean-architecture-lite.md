@@ -1,6 +1,6 @@
 # Clean Architecture Lite
 
-> **Ref:** `LAY-002` | **Category:** Layered
+> **Ref:** `STR002` | **Category:** Structural
 
 Single-project Clean Architecture using folders, namespaces, and interfaces to enforce layer boundaries without the ceremony of multiple projects.
 
@@ -8,7 +8,7 @@ Single-project Clean Architecture using folders, namespaces, and interfaces to e
 
 - **2–5 developers** working on a codebase with non-trivial business logic
 - The domain has real rules beyond CRUD — but not enough complexity to justify four separate projects
-- You've outgrown N-Tier (LAY-001): service classes are getting large, business logic is leaking into controllers or repositories
+- You've outgrown N-Tier ([STR001](STR001%20-%20n-tier.md)): service classes are getting large, business logic is leaking into controllers or repositories
 - You want the discipline of Clean Architecture without the overhead of managing multiple .csproj files
 - APIs with 10–50 endpoints and a domain model worth protecting
 
@@ -16,9 +16,9 @@ This is the sweet spot for most line-of-business applications that aren't pure C
 
 ## When NOT to Use
 
-- Pure CRUD with no business rules — use N-Tier (LAY-001), it's simpler and you won't benefit from the extra structure
-- Large teams or complex domains where you need **compile-time** enforcement of layer boundaries — use Full Clean Architecture (LAY-003)
-- Multiple deployment targets (API + worker + CLI) sharing domain logic — multiple projects (LAY-003) make this cleaner
+- Pure CRUD with no business rules — use N-Tier ([STR001](STR001%20-%20n-tier.md)), it's simpler and you won't benefit from the extra structure
+- Large teams or complex domains where you need **compile-time** enforcement of layer boundaries — use Full Clean Architecture ([STR003](STR003%20-%20full-clean-architecture.md))
+- Multiple deployment targets (API + worker + CLI) sharing domain logic — multiple projects ([STR003](STR003%20-%20full-clean-architecture.md)) make this cleaner
 - If your `Domain/` folder only contains entities with public getters/setters and no methods, you don't need this — you have an anaemic model dressed up as Clean Architecture
 
 ## Solution Structure
@@ -110,16 +110,16 @@ Api/  →  Application/  →  Domain/
 **Namespace enforcement:** Since there are no project boundaries to prevent violations, use namespace discipline. If you see `using MyApp.Infrastructure;` inside a file under `Domain/` or `Application/`, that's a violation. Use an `.editorconfig` rule or an ArchUnit test to catch this:
 
 ```csharp
+// Using NetArchTest.Rules
 [Fact]
 public void Domain_ShouldNotReference_Infrastructure()
 {
-    var domainTypes = typeof(Order).Assembly.GetTypes()
-        .Where(t => t.Namespace?.StartsWith("MyApp.Domain") == true);
+    var result = Types.InNamespace("MyApp.Domain")
+        .ShouldNot()
+        .HaveDependencyOn("MyApp.Infrastructure")
+        .GetResult();
 
-    foreach (var type in domainTypes)
-    {
-        type.Namespace.Should().NotContain("Infrastructure");
-    }
+    result.IsSuccessful.Should().BeTrue();
 }
 ```
 
@@ -236,7 +236,7 @@ Controller maps Result → OrderResponse (API DTO)
 HTTP 201 Created
 ```
 
-The key difference from N-Tier (LAY-001): the `Order` entity itself contains business logic (e.g., `order.AddItem(product, quantity)` validates stock), rather than the service doing everything.
+The key difference from N-Tier ([STR001](STR001%20-%20n-tier.md)): the `Order` entity itself contains business logic (e.g., `order.AddItem(product, quantity)` validates stock), rather than the service doing everything.
 
 ## Where Business Logic Lives
 
@@ -291,7 +291,7 @@ public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
 
 ## Common Mistakes
 
-1. **Anaemic domain entities.** Entities with only properties and no methods are DTOs, not domain objects. If `Order` has public setters and no behaviour methods, you're doing N-Tier with extra folders. Either add real behaviour or drop back to LAY-001.
+1. **Anaemic domain entities.** Entities with only properties and no methods are DTOs, not domain objects. If `Order` has public setters and no behaviour methods, you're doing N-Tier with extra folders. Either add real behaviour or drop back to [STR001](STR001%20-%20n-tier.md).
 
 2. **Business logic in use case handlers.** The handler calculates discounts, validates stock, applies tax rules. All of this belongs in domain entities or domain services. Handlers orchestrate; entities decide.
 
@@ -305,4 +305,4 @@ public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
 
 7. **Putting interfaces in the wrong layer.** `IOrderRepository` goes in **Domain/** (it's a domain concept — persistence of aggregates). `IEmailSender` goes in **Application/** (it's an application concern). `IOrderRepository` does NOT go in Infrastructure.
 
-8. **Over-engineering for a CRUD app.** If your entities have no behaviour methods and your use cases are all just "get from repo, map, return," you don't need this pattern. Use LAY-001 and save yourself the ceremony.
+8. **Over-engineering for a CRUD app.** If your entities have no behaviour methods and your use cases are all just "get from repo, map, return," you don't need this pattern. Use [STR001](STR001%20-%20n-tier.md) and save yourself the ceremony.

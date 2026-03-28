@@ -1,6 +1,6 @@
 # Vertical Slice Architecture
 
-> **Ref:** `FTR-001` | **Category:** Feature-oriented
+> **Ref:** `STR004` | **Category:** Structural
 
 Organised by feature, where each slice owns its endpoint, handler, validation, and data access — minimising cross-feature coupling.
 
@@ -15,9 +15,9 @@ Organised by feature, where each slice owns its endpoint, handler, validation, a
 
 ## When NOT to Use
 
-- The domain model is the primary asset — rich entities with shared invariants spanning multiple features need a domain-centric pattern (LAY-003 or DOM-001)
+- The domain model is the primary asset — rich entities with shared invariants spanning multiple features need a domain-centric pattern (STR003 or [STR006](STR006%20-%20hexagonal.md))
 - Heavy cross-feature business logic: if most features need to coordinate with each other, you'll end up with shared services that defeat the purpose
-- Small CRUD apps — LAY-001 is simpler and you don't have enough features to justify the per-feature overhead
+- Small CRUD apps — [STR001](STR001%20-%20n-tier.md) is simpler and you don't have enough features to justify the per-feature overhead
 - If your "slices" all look identical (get entity, map to DTO, return), you've got a CRUD app and this pattern adds ceremony without benefit
 
 ## Solution Structure
@@ -220,7 +220,7 @@ CreateOrder.Result returned
 Results.Created(url, result)
 ```
 
-There are no layers to traverse. The handler is the feature. It queries what it needs, does what it needs to do, and returns the result. Compare this with LAY-003 where the same operation crosses Controller → MediatR → Handler → Repository → DbContext.
+There are no layers to traverse. The handler is the feature. It queries what it needs, does what it needs to do, and returns the result. Compare this with [STR003](STR003%20-%20full-clean-architecture.md) where the same operation crosses Controller → MediatR → Handler → Repository → DbContext.
 
 ## Where Business Logic Lives
 
@@ -233,7 +233,7 @@ Each handler owns its business logic entirely. `CreateOrder.Handler` validates s
 - If two features in the **same resource group** share logic (e.g., `CreateOrder` and `UpdateOrder` both validate stock), extract a private method or a small helper class within the `Orders/` folder.
 - If features across **different resource groups** share logic (e.g., stock validation is needed by both Orders and Returns), extract a domain service into `Domain/`. This should be rare — if it's happening often, vertical slices may not be the right pattern.
 
-**The escape hatch:** If you find yourself building a rich shared domain model with entities calling each other and enforcing cross-entity invariants, you've outgrown this pattern. Move to LAY-003 or DOM-001.
+**The escape hatch:** If you find yourself building a rich shared domain model with entities calling each other and enforcing cross-entity invariants, you've outgrown this pattern. Move to [STR003](STR003%20-%20full-clean-architecture.md) or [STR006](STR006%20-%20hexagonal.md).
 
 ## Testing Strategy
 
@@ -306,6 +306,6 @@ public class CreateOrderTests(CustomWebApplicationFactory factory)
 
 5. **Giant Shared/ folder.** If `Shared/` has services, helpers, utilities, and business logic, you've built a horizontal layer and destroyed the vertical slicing. `Shared/` is for infrastructure plumbing only: validation pipeline, exception handling, logging.
 
-6. **Not knowing when to stop.** If every new feature requires modifying shared domain logic, entities are deeply interrelated, or you're building complex invariants that span features — this pattern isn't working. Graduate to LAY-003 or DOM-001.
+6. **Not knowing when to stop.** If every new feature requires modifying shared domain logic, entities are deeply interrelated, or you're building complex invariants that span features — this pattern isn't working. Graduate to [STR003](STR003%20-%20full-clean-architecture.md) or [STR006](STR006%20-%20hexagonal.md).
 
 7. **Mixing Minimal API endpoints and Controllers.** Pick one. This pattern pairs naturally with Minimal API endpoints (each slice registers its own endpoint). If using Controllers, group slices by controller, but keep the one-file-per-operation principle.

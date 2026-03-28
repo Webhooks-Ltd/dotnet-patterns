@@ -1,6 +1,6 @@
 # Modular Monolith
 
-> **Ref:** `FTR002` | **Category:** Feature-oriented
+> **Ref:** `STR005` | **Category:** Structural
 
 Independent modules within one deployable, each with clear boundaries, own data, and explicit public contracts — a monolith that could become microservices but doesn't have to.
 
@@ -10,14 +10,14 @@ Independent modules within one deployable, each with clear boundaries, own data,
 - Multiple distinct business domains within one product that need to evolve independently
 - You want microservice-like autonomy without the operational overhead of distributed systems
 - The system is complex enough that a single codebase without boundaries would devolve into a big ball of mud
-- You want the **option** to extract services later — modular monolith is the best stepping stone to microservices (DST001)
+- You want the **option** to extract services later — modular monolith is the best stepping stone to microservices ([STR007](STR007%20-%20microservices.md))
 - Deployment as a single unit is acceptable or even desirable
 
 ## When NOT to Use
 
-- Small apps (under ~15 endpoints) where module boundaries add overhead without benefit — use LYR001 or LYR002
+- Small apps (under ~15 endpoints) where module boundaries add overhead without benefit — use [STR001](STR001%20-%20n-tier.md) or [STR002](STR002%20-%20clean-architecture-lite.md)
 - The domain is genuinely a single cohesive thing — forced module boundaries create artificial seams
-- You need independent deployment **now** — use microservices (DST001)
+- You need independent deployment **now** — use microservices ([STR007](STR007%20-%20microservices.md))
 - Teams can't agree on or enforce module boundaries — a modular monolith without discipline becomes a distributed monolith in one process
 
 ## Solution Structure
@@ -96,7 +96,7 @@ MyApp/
     └── MyApp.IntegrationTests/
 ```
 
-Each **module** is its own class library project. Internally, each module can use whatever structure fits — the Orders module shown above uses a mini Clean Architecture (Domain/Application/Infrastructure/Api), but a simpler module might use Vertical Slices (FTR001) internally.
+Each **module** is its own class library project. Internally, each module can use whatever structure fits — the Orders module shown above uses a mini Clean Architecture (Domain/Application/Infrastructure/Api), but a simpler module might use Vertical Slices ([STR004](STR004%20-%20vertical-slice.md)) internally.
 
 **MyApp.Host** — the ASP.NET Core application. It references all modules and wires them together at startup. Contains no business logic.
 
@@ -153,7 +153,7 @@ The `internal` keyword is your primary boundary enforcement tool. Everything ins
 
 ## Key Abstractions
 
-Module registration interface:
+Module registration interface (C# 11+ / .NET 7+):
 
 ```csharp
 // Shared.Contracts/Abstractions/IModule.cs
@@ -161,6 +161,16 @@ public interface IModule
 {
     static abstract void ConfigureServices(IServiceCollection services, IConfiguration configuration);
     static abstract void MapEndpoints(IEndpointRouteBuilder app);
+}
+```
+
+Alternative for teams that prefer instance-based registration:
+
+```csharp
+public interface IModule
+{
+    void ConfigureServices(IServiceCollection services, IConfiguration configuration);
+    void MapEndpoints(IEndpointRouteBuilder app);
 }
 ```
 
@@ -270,7 +280,7 @@ InventoryModule's OrderPlacedHandler
 Database UPDATE (inventory schema)
 ```
 
-The key: modules communicate **asynchronously through events**, even though they're in the same process. This makes future extraction to microservices straightforward — swap the `InMemoryEventBus` for RabbitMQ or Azure Service Bus.
+The key: modules communicate **through events**, even though they're in the same process. The `InMemoryEventBus` dispatches in-process (potentially synchronously within the same request), but the programming model is event-driven — publishers don't know who consumes. This makes future extraction to microservices straightforward: swap the `InMemoryEventBus` for RabbitMQ or Azure Service Bus to get true async delivery.
 
 ## Where Business Logic Lives
 

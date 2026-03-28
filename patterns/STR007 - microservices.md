@@ -1,6 +1,6 @@
 # Microservices
 
-> **Ref:** `DST-001` | **Category:** Distributed
+> **Ref:** `STR007` | **Category:** Structural
 
 Independently deployable services, each owning its data and communicating through well-defined APIs and asynchronous messaging.
 
@@ -9,12 +9,12 @@ Independently deployable services, each owning its data and communicating throug
 - **15+ developers** across multiple teams, each needing to deploy independently on their own cadence
 - Distinct bounded contexts with genuinely different scaling requirements (orders: high write volume; product catalogue: high read volume, rare writes)
 - Organisational structure demands service ownership — Conway's Law is in full effect and you're leaning into it
-- You've already built a modular monolith (FTR-002) and have evidence that specific modules need independent deployment, scaling, or technology choices
+- You've already built a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) and have evidence that specific modules need independent deployment, scaling, or technology choices
 - You can invest in the infrastructure: CI/CD per service, centralised logging, distributed tracing, container orchestration
 
 ## When NOT to Use
 
-- **Under ~15 developers.** The coordination overhead of microservices will outrun your team's capacity. Use a modular monolith (FTR-002) instead.
+- **Under ~15 developers.** The coordination overhead of microservices will outrun your team's capacity. Use a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) instead.
 - You can't invest in infrastructure. Without proper CI/CD, observability, and orchestration, microservices become a liability.
 - You're searching for product-market fit. Microservices slow down pivoting — you'll spend time re-wiring service boundaries instead of iterating on features.
 - The domains aren't actually independent. If every user request touches 5 services in a synchronous chain, you have a distributed monolith with network latency.
@@ -94,7 +94,7 @@ MyApp/
     └── MyApp.EndToEnd.Tests/
 ```
 
-**Each service** is an independently deployable ASP.NET Core application with its own `Program.cs`, `Dockerfile`, and database context. Internally, each service can use any pattern — the Orders service above uses Vertical Slices (FTR-001) because it's feature-heavy. A simpler service might use N-Tier (LAY-001). A complex domain service might use Hexagonal (DOM-001).
+**Each service** is an independently deployable ASP.NET Core application with its own `Program.cs`, `Dockerfile`, and database context. Internally, each service can use any pattern — the Orders service above uses Vertical Slices ([STR004](STR004%20-%20vertical-slice.md)) because it's feature-heavy. A simpler service might use N-Tier ([STR001](STR001%20-%20n-tier.md)). A complex domain service might use Hexagonal ([STR006](STR006%20-%20hexagonal.md)).
 
 **MyApp.Contracts** — shared event definitions and API DTOs. This is a NuGet package (or project reference in mono-repo). Keep it thin — only types that cross service boundaries.
 
@@ -179,8 +179,9 @@ public sealed class Handler(OrdersDbContext db, IPublishEndpoint publisher)
     {
         var order = new Order { /* ... */ };
         db.Orders.Add(order);
-        await db.SaveChangesAsync(ct);
 
+        // Use MassTransit's transactional outbox to avoid the dual-write problem.
+        // Without it, a failed Publish after a successful Save loses the event.
         await publisher.Publish(new OrderPlacedEvent(
             Guid.NewGuid(),
             DateTime.UtcNow,
@@ -247,8 +248,9 @@ builder.Services.AddHttpClient<InventoryClient>(client =>
 var builder = DistributedApplication.CreateBuilder(args);
 
 var messaging = builder.AddRabbitMQ("messaging");
-var ordersDb = builder.AddSqlServer("sql").AddDatabase("orders-db");
-var inventoryDb = builder.AddSqlServer("sql").AddDatabase("inventory-db");
+var sql = builder.AddSqlServer("sql");
+var ordersDb = sql.AddDatabase("orders-db");
+var inventoryDb = sql.AddDatabase("inventory-db");
 
 var orders = builder.AddProject<Projects.MyApp_Services_Orders>("orders")
     .WithReference(ordersDb)
@@ -338,7 +340,7 @@ Use MassTransit's saga state machine or a dedicated orchestrator service for com
 - Each service is a bounded context. It owns its domain model, its data, and its business rules. The Orders service knows everything about order lifecycle. The Inventory service knows everything about stock management.
 - **Cross-service business processes** use sagas or choreography. No service contains rules about another service's domain.
 - **If you find business logic in the gateway, contracts, or shared libraries, you have a problem.** Business logic belongs in the service that owns that domain concept.
-- **Each service picks its own internal pattern.** A simple CRUD notification service might use LAY-001. An order processing service with complex rules might use DOM-001. Don't force a single internal architecture across all services.
+- **Each service picks its own internal pattern.** A simple CRUD notification service might use [STR001](STR001%20-%20n-tier.md). An order processing service with complex rules might use [STR006](STR006%20-%20hexagonal.md). Don't force a single internal architecture across all services.
 
 ## Testing Strategy
 
@@ -374,13 +376,15 @@ tests/
 
 ```csharp
 // EndToEnd test example with Aspire
-public class OrderFulfilmentTests(DistributedApplicationFixture fixture)
-    : IClassFixture<DistributedApplicationFixture>
+public class OrderFulfilmentTests(IDistributedApplicationTestingBuilder builder)
 {
     [Fact]
     public async Task PlaceOrder_ReservesStock_ProcessesPayment_SendsNotification()
     {
-        var ordersClient = fixture.CreateHttpClient("orders");
+        await using var app = await builder.BuildAsync();
+        await app.StartAsync();
+
+        var ordersClient = app.CreateHttpClient("orders");
 
         var response = await ordersClient.PostAsJsonAsync("/api/orders", new
         {
@@ -390,14 +394,15 @@ public class OrderFulfilmentTests(DistributedApplicationFixture fixture)
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        // Wait for async processing
-        await fixture.WaitForEventProcessing();
-
-        // Verify stock was reserved in inventory service
-        var inventoryClient = fixture.CreateHttpClient("inventory");
-        var availability = await inventoryClient.GetFromJsonAsync<ProductAvailabilityDto>(
-            $"/api/products/{seededProductId}/availability");
-        availability!.AvailableStock.Should().Be(initialStock - 2);
+        // Poll inventory service for eventual consistency
+        var inventoryClient = app.CreateHttpClient("inventory");
+        await Poll.UntilAsync(async () =>
+        {
+            var availability = await inventoryClient
+                .GetFromJsonAsync<ProductAvailabilityDto>(
+                    $"/api/products/{seededProductId}/availability");
+            return availability!.AvailableStock == initialStock - 2;
+        });
     }
 }
 ```
@@ -412,7 +417,7 @@ public class OrderFulfilmentTests(DistributedApplicationFixture fixture)
 
 4. **No contract testing.** The Orders service changes `OrderPlacedEvent` and breaks 3 consumers. Without contract tests, you find out in production. Add contract tests to CI — they're cheap and catch breaking changes early.
 
-5. **Premature microservices.** Starting with microservices on day one. Build a modular monolith (FTR-002) first. Extract services only when you have evidence: a module needs independent scaling, independent deployment, or a different technology choice.
+5. **Premature microservices.** Starting with microservices on day one. Build a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) first. Extract services only when you have evidence: a module needs independent scaling, independent deployment, or a different technology choice.
 
 6. **Too-fine-grained services.** A service per entity: `OrderService`, `OrderItemService`, `OrderStatusService`. Services should align with bounded contexts — cohesive business capabilities — not database tables. A "service" with one endpoint is probably just a function.
 

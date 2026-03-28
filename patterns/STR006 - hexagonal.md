@@ -1,6 +1,6 @@
 # Hexagonal Architecture (Ports & Adapters)
 
-> **Ref:** `DOM001` | **Category:** Domain-centric
+> **Ref:** `STR006` | **Category:** Structural
 
 Domain at the centre, with ports (interfaces) defining how the domain interacts with the outside world and adapters providing concrete implementations.
 
@@ -17,7 +17,7 @@ Domain at the centre, with ports (interfaces) defining how the domain interacts 
 - CRUD applications with thin business logic — you'll create ports and adapters for operations that are just pass-through to the database
 - You don't actually have multiple entry points or any plan to swap infrastructure — the abstraction cost isn't justified
 - Small, short-lived applications where the overhead of defining ports and adapters exceeds the value of the separation
-- If you'd use the same pattern as Full Clean Architecture (LYR003) — hexagonal and clean architecture overlap significantly. The difference is emphasis: hexagonal focuses on the domain's relationship with the outside world through explicit ports; clean architecture focuses on dependency direction between layers. Choose one mental model, not both.
+- If you'd use the same pattern as Full Clean Architecture ([STR003](STR003%20-%20full-clean-architecture.md)) — hexagonal and clean architecture overlap significantly. The difference is emphasis: hexagonal focuses on the domain's relationship with the outside world through explicit ports; clean architecture focuses on dependency direction between layers. Choose one mental model, not both.
 
 ## Solution Structure
 
@@ -88,7 +88,7 @@ MyApp/
     └── MyApp.Host.Tests/
 ```
 
-**MyApp.Domain** — the hexagon. Contains the domain model, business rules, **driving ports** (what the outside world can ask the domain to do), **driven ports** (what the domain needs from the outside world), and domain services that implement driving ports. Zero NuGet packages.
+**MyApp.Domain** — the hexagon. Contains the domain model, business rules, **driving ports** (what the outside world can ask the domain to do), **driven ports** (what the domain needs from the outside world), and domain services that implement driving ports. Zero NuGet packages. Note: placing use-case orchestration services inside the Domain project follows Alistair Cockburn's original hexagonal definition. Many .NET teams instead add a separate `MyApp.Application` project for orchestration (converging with [STR003](STR003%20-%20full-clean-architecture.md)) — that's a valid adaptation, but this document describes the pure hexagonal approach where all logic inside the hexagon is one project.
 
 **Driving adapters** (Web, Messaging) — translate external input into calls on driving ports. A REST controller receives an HTTP request and calls `IPlaceOrderUseCase`. A message consumer receives a queue message and calls the same port. The domain doesn't know which adapter triggered it.
 

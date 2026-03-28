@@ -1,25 +1,24 @@
 # N-Tier
 
-> **Ref:** `LYR001` | **Category:** Layered
+> **Ref:** `STR001` | **Category:** Structural
 
-Single-project architecture with Controllers → Services → Data Access layers separated by folders and interfaces.
+Multi-project solution with three layers — Web, Business, and Data Access — each in its own project, connected by interfaces.
 
 ## When to Use
 
-- **1–3 developers** working on a single codebase
+- **1–4 developers** working on a single codebase
 - CRUD-heavy applications with straightforward business rules
 - Internal tools, admin panels, simple APIs
-- Prototypes and MVPs where speed matters more than architectural purity
 - The domain logic fits comfortably in service methods — no complex invariants, no aggregate roots, no domain events
 
 If you catch yourself saying "it's basically just database operations with some validation," this is your pattern.
 
 ## When NOT to Use
 
-- Business rules are complex enough to warrant a domain model (use LYR002 or LYR003)
-- Multiple teams need to work on the same codebase without stepping on each other (use FTR001 or FTR002)
+- Business rules are complex enough to warrant a domain model (use [STR002](STR002%20-%20clean-architecture-lite.md) or [STR003](STR003%20-%20full-clean-architecture.md))
+- Multiple teams need to work on the same codebase without stepping on each other (use [STR004](STR004%20-%20vertical-slice.md) or [STR005](STR005%20-%20modular-monolith.md))
 - You need to swap infrastructure (e.g., change database provider) without touching business logic — the coupling here makes that painful
-- The service layer is growing beyond ~500 lines per service — that's a signal to graduate to LYR002
+- The service layer is growing beyond ~500 lines per service — that's a signal to graduate to [STR002](STR002%20-%20clean-architecture-lite.md)
 
 ## Solution Structure
 
@@ -27,72 +26,88 @@ If you catch yourself saying "it's basically just database operations with some 
 MyApp/
 ├── MyApp.sln
 └── src/
-    └── MyApp/
-        ├── MyApp.csproj
-        ├── Program.cs
-        ├── appsettings.json
-        ├── Controllers/
-        │   ├── OrdersController.cs
-        │   └── ProductsController.cs
-        ├── Services/
-        │   ├── IOrderService.cs
-        │   ├── OrderService.cs
-        │   ├── IProductService.cs
-        │   └── ProductService.cs
+    ├── MyApp.Web/
+    │   ├── MyApp.Web.csproj                ← references MyApp.Business
+    │   ├── Program.cs
+    │   ├── appsettings.json
+    │   ├── Controllers/
+    │   │   ├── OrdersController.cs
+    │   │   └── ProductsController.cs
+    │   ├── DTOs/
+    │   │   ├── CreateOrderRequest.cs
+    │   │   ├── OrderResponse.cs
+    │   │   └── ProductResponse.cs
+    │   └── Middleware/
+    │       └── ExceptionHandlingMiddleware.cs
+    │
+    ├── MyApp.Business/
+    │   ├── MyApp.Business.csproj            ← references MyApp.Data
+    │   ├── DependencyInjection.cs
+    │   ├── Interfaces/
+    │   │   ├── IOrderService.cs
+    │   │   └── IProductService.cs
+    │   ├── Services/
+    │   │   ├── OrderService.cs
+    │   │   └── ProductService.cs
+    │   └── Mapping/
+    │       └── MappingExtensions.cs
+    │
+    └── MyApp.Data/
+        ├── MyApp.Data.csproj                ← references nothing
+        ├── DependencyInjection.cs
+        ├── AppDbContext.cs
+        ├── Entities/
+        │   ├── Order.cs
+        │   ├── OrderItem.cs
+        │   └── Product.cs
         ├── Repositories/
         │   ├── IOrderRepository.cs
         │   ├── OrderRepository.cs
         │   ├── IProductRepository.cs
         │   └── ProductRepository.cs
-        ├── Models/
-        │   ├── Entities/
-        │   │   ├── Order.cs
-        │   │   ├── OrderItem.cs
-        │   │   └── Product.cs
-        │   ├── DTOs/
-        │   │   ├── CreateOrderRequest.cs
-        │   │   ├── OrderResponse.cs
-        │   │   └── ProductResponse.cs
-        │   └── Mapping/
-        │       └── MappingExtensions.cs
-        ├── Data/
-        │   ├── AppDbContext.cs
-        │   └── Configurations/
-        │       ├── OrderConfiguration.cs
-        │       └── ProductConfiguration.cs
-        └── Middleware/
-            └── ExceptionHandlingMiddleware.cs
+        └── Configurations/
+            ├── OrderConfiguration.cs
+            └── ProductConfiguration.cs
 ```
 
-**Controllers/** — HTTP layer. Receives requests, calls services, returns responses. No business logic.
+**MyApp.Web** — ASP.NET Core host. Controllers, API DTOs, middleware. Receives HTTP requests, calls services, returns responses. No business logic.
 
-**Services/** — Business logic. Orchestrates operations, enforces rules, coordinates repositories. Each service has an interface and implementation.
+**MyApp.Business** — Service interfaces and implementations. All business logic lives here: validation, calculations, state transitions, cross-entity coordination.
 
-**Repositories/** — Data access. Encapsulates EF Core queries. Each repository has an interface and implementation.
-
-**Models/Entities/** — EF Core entity classes. These map directly to database tables.
-
-**Models/DTOs/** — Request and response types for the API. Never expose entities directly.
-
-**Data/** — DbContext and EF Core configurations (Fluent API).
-
-**Middleware/** — Cross-cutting concerns like exception handling, logging, correlation IDs.
+**MyApp.Data** — EF Core DbContext, entity classes, repository interfaces and implementations, Fluent API configurations. Entities live here because they are data-access concerns — they map directly to database tables.
 
 ## Dependency Rules
 
 ```
-Controllers  →  Services  →  Repositories  →  Data/DbContext
-     ↓              ↓              ↓
-   DTOs          Entities       Entities
+┌──────────────┐
+│  MyApp.Web   │
+└──────┬───────┘
+       │ references
+       ▼
+┌──────────────────┐
+│  MyApp.Business  │
+└──────┬───────────┘
+       │ references
+       ▼
+┌──────────────┐
+│  MyApp.Data  │
+└──────────────┘
 ```
 
-- Controllers depend on service **interfaces**, never implementations
-- Services depend on repository **interfaces**, never implementations
-- Repositories depend on `AppDbContext` directly
-- **Nothing** depends on Controllers
-- **Services must not** call other services — if you need cross-service orchestration, create a new service that coordinates them
-- **Repositories must not** contain business logic — they are query/persistence only
-- **Controllers must not** bypass services to call repositories directly
+- `Web` references `Business` only. It calls service interfaces and handles HTTP concerns.
+- `Business` references `Data` only. It calls repository interfaces and contains all business logic.
+- `Data` references nothing (except EF Core NuGet packages). It owns entities, DbContext, and repository implementations.
+- **Web must not** reference `Data` directly — no `AppDbContext` in controllers.
+- **Services must not** call other services — if you need cross-service orchestration, create a new service that depends on the repositories it needs directly.
+- **Repositories must not** contain business logic — they are query/persistence only.
+- **Controllers must not** bypass services to call repositories directly.
+
+DI wiring: each layer exposes an `AddX` extension method. `Program.cs` calls both:
+
+```csharp
+builder.Services.AddBusinessServices();
+builder.Services.AddDataServices(builder.Configuration);
+```
 
 ## Naming Conventions
 
@@ -133,15 +148,33 @@ public interface IOrderRepository
 }
 ```
 
-DI registration in `Program.cs`:
+DI registration — each layer registers its own services:
 
 ```csharp
-builder.Services.AddScoped<IOrderService, OrderService>();
-builder.Services.AddScoped<IOrderRepository, OrderRepository>();
-builder.Services.AddScoped<IProductService, ProductService>();
-builder.Services.AddScoped<IProductRepository, ProductRepository>();
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("Default")));
+// MyApp.Business/DependencyInjection.cs
+public static class DependencyInjection
+{
+    public static IServiceCollection AddBusinessServices(this IServiceCollection services)
+    {
+        services.AddScoped<IOrderService, OrderService>();
+        services.AddScoped<IProductService, ProductService>();
+        return services;
+    }
+}
+
+// MyApp.Data/DependencyInjection.cs
+public static class DependencyInjection
+{
+    public static IServiceCollection AddDataServices(
+        this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlServer(configuration.GetConnectionString("Default")));
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        return services;
+    }
+}
 ```
 
 ## Data Flow
@@ -194,15 +227,17 @@ If you put business logic in a controller, you can't reuse it. If you put it in 
 ```
 MyApp/
 ├── src/
-│   └── MyApp/
+│   ├── MyApp.Web/
+│   ├── MyApp.Business/
+│   └── MyApp.Data/
 └── tests/
-    ├── MyApp.UnitTests/
-    │   ├── MyApp.UnitTests.csproj
+    ├── MyApp.Business.Tests/
+    │   ├── MyApp.Business.Tests.csproj    ← references Business + Data
     │   └── Services/
     │       ├── OrderServiceTests.cs
     │       └── ProductServiceTests.cs
-    └── MyApp.IntegrationTests/
-        ├── MyApp.IntegrationTests.csproj
+    └── MyApp.Web.Tests/
+        ├── MyApp.Web.Tests.csproj         ← references Web
         ├── CustomWebApplicationFactory.cs
         └── Endpoints/
             ├── OrdersEndpointTests.cs
