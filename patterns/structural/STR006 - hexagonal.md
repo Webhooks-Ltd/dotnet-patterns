@@ -403,7 +403,7 @@ public sealed class PlaceOrderServiceTests
 
 Notice the driven ports are substituted — the domain service has no idea whether it's running against a real database or test doubles. This is the hexagonal payoff: you test business logic in isolation by swapping the driven side.
 
-**Adapter tests** — integration tests per adapter. Test driven adapters against real infrastructure (Testcontainers for databases, WireMock for HTTP APIs). Each adapter test verifies that the adapter correctly translates between domain types and external formats:
+**Adapter tests** — integration tests per adapter. Test driven adapters against real infrastructure (a test container library for databases, a HTTP mock server for HTTP APIs). Each adapter test verifies that the adapter correctly translates between domain types and external formats:
 
 ```csharp
 public sealed class SqlOrderRepositoryTests : IAsyncLifetime
@@ -471,3 +471,9 @@ The hexagonal shape makes testing natural: swap driven adapters at any level. Do
 10. **Exposing domain types in API contracts.** Returning `Order` or `Money` directly from a controller response. Domain types represent internal state and invariants — they should never be serialised directly to clients. Driving adapters must map domain types to response DTOs. This also prevents API contract breakage when the domain model evolves.
 
 11. **N+1 port calls in a loop.** Calling a driven port inside a `foreach` — e.g., `await repository.GetByIdAsync(id)` per item. Design port methods that accept batches: `GetByIdsAsync(IReadOnlyList<Guid> ids)`. The adapter can then optimise the query.
+
+## Related Packages
+
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **HTTP mocking:** WireMock.Net
+- **Mapping:** Mapster · AutoMapper

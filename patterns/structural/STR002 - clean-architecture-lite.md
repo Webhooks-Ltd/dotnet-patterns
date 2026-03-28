@@ -151,7 +151,7 @@ public void Application_ShouldNotReference_InfrastructureOrApi()
 }
 ```
 
-> **Package:** [NetArchTest.Rules](https://www.nuget.org/packages/NetArchTest.Rules) — add it to your test project. Since this is a single-project architecture, all types share one assembly, so `Types.InAssembly()` with namespace filtering is the correct approach. These tests are cheap to run and catch violations in CI before they become habits.
+> Use an architecture testing library in your test project. Since this is a single-project architecture, all types share one assembly, so filter by namespace. These tests are cheap to run and catch violations in CI before they become habits.
 
 ## Naming Conventions
 
@@ -336,9 +336,9 @@ public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
 
 **Application unit tests** — test use case handlers with mocked repositories. Verify orchestration logic.
 
-**Architecture tests** — enforce layer dependency rules using NetArchTest (see Dependency Rules section above). These are critical in a single-project setup because there are no compile-time project boundaries to catch violations.
+**Architecture tests** — enforce layer dependency rules (see Dependency Rules section above). These are critical in a single-project setup because there are no compile-time project boundaries to catch violations.
 
-**Integration tests** — test the full HTTP pipeline with `WebApplicationFactory<Program>` and Testcontainers.
+**Integration tests** — test the full HTTP pipeline with `WebApplicationFactory<Program>` and a test container library.
 
 ## Common Mistakes
 
@@ -352,7 +352,7 @@ public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
 
 5. **API DTOs reused as use case commands.** `CreateOrderRequest` (API) and `CreateOrder.Command` (Application) look similar but serve different purposes. The API DTO handles serialisation; the command represents intent. Map between them in the controller.
 
-6. **No namespace discipline.** Without separate projects, there's nothing stopping `Domain/Entities/Order.cs` from adding `using MyApp.Infrastructure.Data;`. Use architecture tests (NetArchTest, ArchUnitNET) to enforce rules in CI.
+6. **No namespace discipline.** Without separate projects, there's nothing stopping `Domain/Entities/Order.cs` from adding `using MyApp.Infrastructure.Data;`. Use an architecture testing library to enforce rules in CI.
 
 7. **Putting interfaces in the wrong layer.** `IOrderRepository` goes in **Domain/** (it's a domain concept — persistence of aggregates). `IEmailSender` goes in **Application/** (it's an application concern). `IOrderRepository` does NOT go in Infrastructure.
 
@@ -361,3 +361,10 @@ public void AddItem_InsufficientStock_ThrowsInsufficientStockException()
 9. **Missing `CancellationToken` propagation.** Every async method should accept and forward a `CancellationToken`. Omitting it means long-running requests can't be cancelled when the client disconnects, wasting server resources. Thread it from the controller through the handler to the repository.
 
 10. **Public constructors with no invariant enforcement.** Entities should use factory methods (`Order.Create(...)`) or constructors that validate all required parameters. A `new Order()` followed by a bunch of property sets is an anaemic model in disguise — the entity can exist in an invalid state between the constructor call and the last setter.
+
+## Related Packages
+
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
+- **Architecture testing:** NetArchTest · ArchUnitNET
+- **Mapping:** Mapster · AutoMapper

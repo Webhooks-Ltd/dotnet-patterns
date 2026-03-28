@@ -335,7 +335,7 @@ public interface IPipelineBehaviour<in TRequest, TResult>
 }
 ```
 
-Validation behaviour (runs FluentValidation rules before the handler):
+Validation behaviour (runs validation rules before the handler):
 
 ```csharp
 public sealed class ValidationBehaviour<TRequest, TResult>(
@@ -562,11 +562,11 @@ tests/
 
 **Domain.Tests** — Pure unit tests. No mocks, no DI, no database. Test entity behaviour, value object equality and validation, domain service calculations, and invariant enforcement. These run in milliseconds and are the highest-value tests. If you're writing mocks in a domain test, business logic has leaked out of the domain.
 
-**Application.Tests** — Handler tests with mocked repositories and `IApplicationDbContext` (via NSubstitute or similar). Verify orchestration: does the handler load the right data, call the right domain methods, and persist correctly? Also test validators independently — each validator gets its own test class verifying valid/invalid inputs.
+**Application.Tests** — Handler tests with mocked repositories and `IApplicationDbContext` (via a mocking library). Verify orchestration: does the handler load the right data, call the right domain methods, and persist correctly? Also test validators independently — each validator gets its own test class verifying valid/invalid inputs.
 
-**Infrastructure.Tests** — Integration tests against a real database (Testcontainers with SQL Server or PostgreSQL). Test EF Core entity configurations (column mappings, relationships, value conversions), repository query behaviour, and the domain event dispatcher interceptor. These are slower and fewer in number.
+**Infrastructure.Tests** — Integration tests against a real database (a test container library with SQL Server or PostgreSQL). Test EF Core entity configurations (column mappings, relationships, value conversions), repository query behaviour, and the domain event dispatcher interceptor. These are slower and fewer in number.
 
-**Web.Tests** — API integration tests using `WebApplicationFactory<Program>`. Test the full HTTP pipeline: routing, model binding, serialisation, authentication/authorisation, middleware, and response codes. Use a real database (Testcontainers) or replace infrastructure with test doubles depending on what you're testing.
+**Web.Tests** — API integration tests using `WebApplicationFactory<Program>`. Test the full HTTP pipeline: routing, model binding, serialisation, authentication/authorisation, middleware, and response codes. Use a real database (via a test container library) or replace infrastructure with test doubles depending on what you're testing.
 
 ## Common Mistakes
 
@@ -593,3 +593,10 @@ tests/
 11. **Forgetting CancellationToken propagation.** Every async method from the controller down to the repository should accept and forward `CancellationToken`. If a client disconnects, you want the entire pipeline to stop — not continue running a database query for a response nobody will receive.
 
 12. **Putting repository interfaces in Domain.** This is a common alternative, but in Full Clean Architecture the Domain has no concept of persistence. Repository interfaces belong in Application — they define the data access the application layer needs. The Domain layer contains only business concepts: entities, value objects, events, and domain services.
+
+## Related Packages
+
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
+- **Architecture testing:** NetArchTest · ArchUnitNET
+- **Mapping:** Mapster · AutoMapper

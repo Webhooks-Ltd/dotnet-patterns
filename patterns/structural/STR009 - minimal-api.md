@@ -363,3 +363,9 @@ public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
 9. **Returning `Task<IResult>` when TypedResults are available.** Handler returns `Task<IResult>` with `TypedResults` calls inside. The compiler and OpenAPI generator cannot see the actual response types. Change the return type to `Task<Results<Ok<OrderResponse>, NotFound>>` — the union type makes every possible response explicit.
 
 10. **Not exposing `Program` for integration tests.** `WebApplicationFactory<Program>` needs the `Program` class to be accessible. Add `public partial class Program { }` at the bottom of `Program.cs` or use `InternalsVisibleTo`. Without this, integration tests won't compile.
+
+## Related Packages
+
+- **Validation:** FluentValidation · MiniValidation
+- **OpenAPI:** Swashbuckle · NSwag · Microsoft.AspNetCore.OpenApi
+- **Testing:** xUnit, NUnit · FluentAssertions · Testcontainers · Bogus

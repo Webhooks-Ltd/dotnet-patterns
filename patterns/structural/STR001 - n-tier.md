@@ -251,7 +251,7 @@ The test project structure is shown in the solution structure above. Key points:
 - `MyApp.Business.Tests` references `MyApp.Business` (which transitively brings in `MyApp.Data` for entity types).
 - `MyApp.Web.Tests` references `MyApp.Web` (which transitively brings in everything).
 
-**Unit tests** — test service methods with mocked repositories. This is where you verify business rules. Use xUnit + NSubstitute.
+**Unit tests** — test service methods with mocked repositories. This is where you verify business rules. Use a test framework with a mocking library.
 
 ```csharp
 public sealed class OrderServiceTests
@@ -294,7 +294,7 @@ public sealed class OrderServiceTests
 }
 ```
 
-**Integration tests** — test the full HTTP pipeline using `WebApplicationFactory<Program>` with a real (test) database. Prefer Testcontainers for SQL Server over in-memory providers (SQLite and the EF in-memory provider have behavioral differences from real SQL Server that hide bugs).
+**Integration tests** — test the full HTTP pipeline using `WebApplicationFactory<Program>` with a real (test) database. Prefer a test container library for SQL Server over in-memory providers (SQLite and the EF in-memory provider have behavioral differences from real SQL Server that hide bugs).
 
 ```csharp
 public sealed class OrdersEndpointTests : IClassFixture<CustomWebApplicationFactory>
@@ -340,8 +340,15 @@ public sealed class OrdersEndpointTests : IClassFixture<CustomWebApplicationFact
 
 10. **Unbounded `GetAll` queries.** A `GetAllAsync()` that returns every row in a table is a production incident waiting to happen. Always support pagination — at minimum accept `skip` and `take` parameters. The service interface should look like `Task<PagedResult<OrderResponse>> GetAllAsync(int page, int pageSize, CancellationToken ct)`.
 
-11. **Using the EF in-memory provider for integration tests.** The in-memory provider doesn't enforce constraints, doesn't support transactions, and doesn't behave like a real relational database. Use Testcontainers with the actual database engine.
+11. **Using the EF in-memory provider for integration tests.** The in-memory provider doesn't enforce constraints, doesn't support transactions, and doesn't behave like a real relational database. Use a test container library with the actual database engine.
 
 12. **Explicit `Update` methods on repositories.** EF Core's change tracker detects modifications automatically. Having a `repository.UpdateAsync(entity)` method that calls `DbContext.Update(entity)` forces all properties to be marked as modified, generating unnecessary SQL. Let the change tracker do its job — just modify the entity and call `SaveChangesAsync`.
 
 13. **DTOs in the Web layer.** Putting request/response models in `MyApp.Web` means the Business layer can't reference them and must accept primitive parameters or define its own duplicated models. DTOs belong in `MyApp.Business` — they are the service contract.
+
+## Related Packages
+
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
+- **Architecture testing:** NetArchTest · ArchUnitNET
+- **Mapping:** Mapster · AutoMapper

@@ -62,7 +62,7 @@ MyApp/
 
 **Workers/** — `BackgroundService` implementations. Each worker is a long-running loop or scheduled task. One class per logical workload.
 
-**Consumers/** — Message queue consumers. Each consumer handles one event/message type. The messaging library (MassTransit, NServiceBus, or raw client) determines the base class.
+**Consumers/** — Message queue consumers. Each consumer handles one event/message type. The messaging library determines the base class.
 
 **Services/** — Business logic. Workers and consumers are thin — they receive a trigger (timer tick, message) and delegate to a service.
 
@@ -140,7 +140,7 @@ Prefer `PeriodicTimer` over `while (!token.IsCancellationRequested) { ... await 
 
 **Important:** If `ExecuteAsync` returns (either normally or via an unhandled exception), the host will shut down in .NET 8+. This is a change from earlier versions where a completed `ExecuteAsync` was silently ignored. A timed worker should never exit its loop unless cancellation is requested.
 
-A queue consumer (using MassTransit as an example — adapt for your library):
+A queue consumer (using a messaging library as an example — adapt for yours):
 
 ```csharp
 public sealed class OrderPlacedConsumer(
@@ -312,7 +312,7 @@ public async Task ProcessAsync_CompletesOrder_WhenPaymentConfirmed()
 }
 ```
 
-**Integration tests for consumers** — test message handling end-to-end. MassTransit provides an in-memory test harness (`InMemoryTestHarness` / `TestHarness`). For other libraries, use Testcontainers with a real broker (RabbitMQ, Redis). Publish a message, assert the consumer processed it and the expected side effects occurred.
+**Integration tests for consumers** — test message handling end-to-end. Some messaging libraries provide in-memory test harnesses. Alternatively, use a test container library with a real broker (RabbitMQ, Redis). Publish a message, assert the consumer processed it and the expected side effects occurred.
 
 **Don't unit test `BackgroundService` timing logic.** The loop, the timer, the scope creation — these are infrastructure concerns. Test the services they call. If you find yourself wanting to test that the worker "runs every hour," you're testing the framework, not your code.
 
@@ -339,3 +339,11 @@ public async Task ProcessAsync_CompletesOrder_WhenPaymentConfirmed()
 9. **Blocking host startup in `ExecuteAsync`.** `ExecuteAsync` is called during host startup. If it does synchronous work or a long-running operation before its first `await`, it blocks all subsequent hosted services from starting. The first thing `ExecuteAsync` does should be an `await` — the `PeriodicTimer.WaitForNextTickAsync()` pattern handles this naturally.
 
 10. **Using `Task.Delay` instead of `PeriodicTimer`.** The `while + Task.Delay` loop has two problems: `Task.Delay` throws `OperationCanceledException` on cancellation (requiring extra handling), and it causes timer drift because the delay starts *after* the work completes rather than on a fixed schedule. Use `PeriodicTimer` for fixed-interval work.
+
+## Related Packages
+
+- **Hosting:** Microsoft.Extensions.Hosting.WindowsServices · Microsoft.Extensions.Hosting.Systemd
+- **Messaging:** MassTransit · NServiceBus · Wolverine · Brighter
+- **Scheduling:** Quartz.NET · Hangfire · Cronos
+- **Health checks:** AspNetCore.HealthChecks.*
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · Testcontainers · Microsoft.Extensions.TimeProvider.Testing

@@ -307,7 +307,7 @@ tests/
 
 **Integration tests are the primary testing strategy.** Since each slice owns its full stack — endpoint, validation, handler, data access — the most valuable test exercises the full stack. This is where vertical slices pay off in testing: there are no mocked layers to set up because there are no layers.
 
-Use `WebApplicationFactory` with a real database (Testcontainers for PostgreSQL/SQL Server, or SQLite for simpler cases). Avoid EF Core's in-memory provider — it doesn't enforce constraints, relationships, or SQL-specific behaviour, so your tests pass but production breaks.
+Use `WebApplicationFactory` with a real database (a test container library for PostgreSQL/SQL Server, or SQLite for simpler cases). Avoid EF Core's in-memory provider — it doesn't enforce constraints, relationships, or SQL-specific behaviour, so your tests pass but production breaks.
 
 ```csharp
 public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
@@ -377,7 +377,7 @@ public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
 }
 ```
 
-**Unit tests are the exception, not the rule.** Only unit-test a handler directly when it contains complex pure logic (pricing calculations, state machine transitions, rule evaluation). In those cases, instantiate the handler with a real database (Testcontainers or SQLite) and a `FakeTimeProvider` — don't mock `DbContext`.
+**Unit tests are the exception, not the rule.** Only unit-test a handler directly when it contains complex pure logic (pricing calculations, state machine transitions, rule evaluation). In those cases, instantiate the handler with a real database (a test container library or SQLite) and a `FakeTimeProvider` — don't mock `DbContext`.
 
 ## Common Mistakes
 
@@ -400,3 +400,10 @@ public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
 9. **Premature DTO duplication.** Two features return the same shape? Share the DTO within the feature folder (e.g., `OrderDto.cs` in `Orders/`). Two features in different folders return a similar shape? Let them each define their own response record. Coupling DTOs across feature groups creates ripple effects — the same problem vertical slices are designed to avoid.
 
 10. **Testing handlers in isolation by mocking DbContext.** The whole point of a slice is that it's self-contained. Test it end-to-end through `WebApplicationFactory` with a real (or real-enough) database. Mocking `DbContext` means you're testing whether your handler calls the right mock methods, not whether it actually works.
+
+## Related Packages
+
+- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
+- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Architecture testing:** NetArchTest · ArchUnitNET

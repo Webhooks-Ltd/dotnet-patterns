@@ -166,18 +166,18 @@ public sealed record OrderPlacedEvent(
 }
 ```
 
-Publishing an event (using MassTransit):
+Publishing an event:
 
 ```csharp
 // Services/Orders — inside PlaceOrder handler
-public sealed class Handler(OrdersDbContext db, IPublishEndpoint publisher)
+public sealed class Handler(OrdersDbContext db, IEventPublisher publisher)
 {
     public async Task<PlaceOrderResult> Handle(PlaceOrderCommand command, CancellationToken ct)
     {
         var order = new Order { /* ... */ };
         db.Orders.Add(order);
 
-        await publisher.Publish(new OrderPlacedEvent(
+        await publisher.PublishAsync(new OrderPlacedEvent(
             Guid.NewGuid(),
             DateTimeOffset.UtcNow,
             order.Id,
@@ -194,25 +194,7 @@ public sealed class Handler(OrdersDbContext db, IPublishEndpoint publisher)
 }
 ```
 
-**Transactional outbox setup** — the `Publish` call above doesn't send to the broker immediately. MassTransit's transactional outbox writes the message to the database inside the same transaction as `SaveChangesAsync`. A background delivery service then forwards messages to the broker. This eliminates the dual-write problem (save succeeds, publish fails = lost event). Configure it in `Program.cs`:
-
-```csharp
-builder.Services.AddMassTransit(x =>
-{
-    x.AddConsumers(typeof(Program).Assembly);
-
-    x.AddEntityFrameworkOutbox<OrdersDbContext>(o =>
-    {
-        o.UseSqlServer();
-        o.UseBusOutbox();
-    });
-
-    x.UsingRabbitMq((context, cfg) =>
-    {
-        cfg.ConfigureEndpoints(context);
-    });
-});
-```
+**Use a transactional outbox.** The `PublishAsync` call should not send to the broker immediately. A transactional outbox writes the message to the database inside the same transaction as `SaveChangesAsync`. A background delivery service then forwards messages to the broker. This eliminates the dual-write problem (save succeeds, publish fails = lost event). Most messaging libraries support this pattern natively.
 
 Consuming an event in another service:
 
@@ -361,7 +343,7 @@ If payment fails:
 **Choreography vs orchestration:**
 
 - **Choreography** (events only, no central coordinator) works for simple 2–3 step flows. Each service reacts to events and publishes its own. Downside: the workflow is implicit — you can't look at one place to understand the full process. Debugging failures requires reading logs across multiple services.
-- **Orchestration** (a central saga/state machine coordinates the steps) works for workflows with 4+ steps, compensation logic, or timeouts. The saga state machine is the single source of truth for workflow state. Use MassTransit's `MassTransitStateMachine<TState>` for this — it persists saga state to a database and handles retries, timeouts, and compensating events.
+- **Orchestration** (a central saga/state machine coordinates the steps) works for workflows with 4+ steps, compensation logic, or timeouts. The saga state machine is the single source of truth for workflow state. Use a saga library that persists saga state to a database and handles retries, timeouts, and compensating events.
 
 **Rule of thumb:** if you need to draw a diagram to explain the workflow, you need an orchestrator. If the compensating actions are non-trivial (reverse a payment, release reserved stock, send a cancellation email), use orchestration — choreography makes compensation paths invisible and error-prone.
 
@@ -406,11 +388,11 @@ tests/
         └── OrderFulfilmentTests.cs
 ```
 
-**Per-service tests:** Each service has its own test project. Unit tests + integration tests follow the service's internal architecture. Use `WebApplicationFactory` per service with Testcontainers for the service's own database.
+**Per-service tests:** Each service has its own test project. Unit tests + integration tests follow the service's internal architecture. Use `WebApplicationFactory` per service with a test container library for the service's own database.
 
 **Contract tests:** Verify that services honour their published contracts. When the Orders service publishes `OrderPlacedEvent`, the contract test verifies the event schema matches what consumers expect. In a mono-repo this is largely handled by the compiler (shared project reference to `MyApp.Contracts`). In multi-repo, use Pact or serialisation round-trip tests that deserialise a known JSON payload into the event type and verify all fields are populated — this catches breaking changes when the NuGet package version bumps.
 
-**Event handler tests:** Test consumers in isolation — given this event, verify this state change. Mock the database or use Testcontainers.
+**Event handler tests:** Test consumers in isolation — given this event, verify this state change. Mock the database or use a test container library.
 
 **End-to-end tests:** Minimal. Test critical business workflows across services. Use docker-compose or .NET Aspire's test infrastructure to spin up all services, databases, and message brokers. Keep these to 5–10 critical paths — they're slow and brittle.
 
@@ -500,3 +482,12 @@ public sealed class OrderFulfilmentTests : IAsyncLifetime
 11. **Non-idempotent consumers.** Message brokers guarantee at-least-once delivery, not exactly-once. If your `OrderPlacedHandler` reserves stock twice because the message was redelivered, you have a bug. Every consumer must be idempotent — use the `EventId` to deduplicate, or design operations to be naturally idempotent (set stock to X, not decrement by Y).
 
 12. **No event versioning strategy.** You added a field to `OrderPlacedEvent` and broke every consumer. Events are a public contract — they need backward-compatible evolution. Add optional fields with defaults, never remove or rename fields, and consider a schema registry or explicit version numbers (e.g., `OrderPlacedEventV2`) for breaking changes.
+
+## Related Packages
+
+- **Messaging:** MassTransit · NServiceBus · Wolverine · Brighter
+- **Service discovery / orchestration:** .NET Aspire
+- **API gateway:** YARP (reverse proxy)
+- **Resilience:** Microsoft.Extensions.Http.Resilience · Polly
+- **Contracts / serialisation:** System.Text.Json · MessagePack · Protobuf
+- **Testing:** xUnit, NUnit · Testcontainers · Aspire.Hosting.Testing

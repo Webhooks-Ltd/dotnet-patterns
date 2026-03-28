@@ -42,7 +42,7 @@ graph LR
 ```
 
 - Write side: Command → Handler → Domain entities → Repository → DB
-- Read side: Query → Handler → raw SQL / Dapper / EF projections → DTO
+- Read side: Query → Handler → raw SQL / lightweight ORM / EF projections → DTO
 - **Same database**, different code paths
 - No eventual consistency — reads see writes immediately
 - **Start here.** This solves most CQRS use cases.
@@ -158,8 +158,8 @@ Features/
 ├── Orders/
 │   ├── CreateOrder.cs        ← handler uses domain entities
 │   ├── CancelOrder.cs        ← handler uses domain entities
-│   ├── GetOrderById.cs       ← handler uses raw SQL/Dapper
-│   └── ListOrders.cs         ← handler uses raw SQL/Dapper
+│   ├── GetOrderById.cs       ← handler uses raw SQL or lightweight ORM
+│   └── ListOrders.cs         ← handler uses raw SQL or lightweight ORM
 ```
 
 No structural change needed — just a convention about how query handlers access data.
@@ -201,7 +201,7 @@ public interface IReadDbConnection
 }
 ```
 
-Implement with Dapper, raw ADO.NET, or EF Core's `FromSqlRaw`. The point is that the read side is not forced through the same ORM configuration as the write side.
+Implement with a lightweight ORM (e.g., Dapper), raw ADO.NET, or EF Core's `FromSqlRaw`. The point is that the read side is not forced through the same ORM configuration as the write side.
 
 This is not the only valid approach. If your queries are simple enough, injecting a read-only `DbContext` with `AsNoTracking` projections works just as well and avoids hand-written SQL. The interface above earns its keep when you have complex queries that are painful to express in LINQ, or when you want to enforce that the read side stays ORM-free.
 
@@ -356,3 +356,9 @@ Level 2 introduces a propagation delay between the write and read stores. You ne
 9. **Dispatching events before the transaction commits (Level 2).** If you publish domain events to a message bus before `SaveChangesAsync` completes, a projection might process the event while the write transaction is still in-flight or has rolled back. Either dispatch events *after* the transaction commits, or use the transactional outbox pattern to atomically persist events alongside state changes.
 
 10. **Non-idempotent projections (Level 2).** Events will be delivered more than once — retries, reprocessing after failures, or replaying an event stream. Every projection must produce the same result whether it processes an event once or five times. Use upserts or existence checks, never blind inserts.
+
+## Related Packages
+
+- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
+- **Read-side data access:** Dapper · EF Core (with AsNoTracking projections)
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers

@@ -412,7 +412,7 @@ What blocks this in practice: shared database tables, `TransactionScope` spannin
 
 8. **Business logic in the Host project.** The Host wires modules together — it does not orchestrate business processes. If `Program.cs` contains `if/else` logic about business rules, that logic belongs in a module.
 
-9. **No automated boundary enforcement.** Module boundaries erode silently. A developer adds `using MyApp.Modules.Inventory.Domain;` in the Orders module and no one notices. Use architecture tests (e.g., [NetArchTest](https://github.com/BenMorris/NetArchTest) or [ArchUnitNET](https://github.com/TNG/ArchUnitNET)) to assert module isolation at build time:
+9. **No automated boundary enforcement.** Module boundaries erode silently. A developer adds `using MyApp.Modules.Inventory.Domain;` in the Orders module and no one notices. Use an architecture testing library to assert module isolation at build time:
 
     ```csharp
     [Fact]
@@ -432,3 +432,11 @@ What blocks this in practice: shared database tables, `TransactionScope` spannin
     These tests catch boundary violations in CI before they reach main.
 
 10. **Cross-module transactions.** Wrapping two module operations in a single `TransactionScope` and expecting atomicity. Each module owns its own `DbContext` and its own data. If the Orders handler publishes an event and the Inventory handler fails, you have an inconsistency. Solve this with the **outbox pattern** — persist the event in the publishing module's database within the same transaction, then dispatch it asynchronously. This is the single biggest thing people get wrong when moving from a shared `DbContext` to per-module contexts.
+
+## Related Packages
+
+- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
+- **Messaging / Event bus:** MassTransit · NServiceBus · Wolverine · Brighter
+- **Validation:** FluentValidation
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Architecture testing:** NetArchTest · ArchUnitNET

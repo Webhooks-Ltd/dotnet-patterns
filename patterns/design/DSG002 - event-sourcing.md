@@ -70,94 +70,52 @@ Snapshot at event 500: { Status: "Active", Balance: 1234.56, ... }
 Replay events 501–523 on top of snapshot
 ```
 
-Marten handles snapshots automatically. With EventStoreDB, you manage them manually or use projections.
+Most event store libraries support snapshots — either automatically or via explicit configuration.
 
-## Event Store Options in .NET
+## Event Store
 
-### Marten (PostgreSQL)
+The event store is the persistence layer. It must support:
 
-Marten uses PostgreSQL as the event store. Events are stored in a `mt_events` table as JSONB. It provides aggregate rehydration, inline and async projections, and snapshot support out of the box.
+- **Append-only writes** — events are immutable once stored
+- **Stream-based reads** — load all events for a given aggregate by stream ID
+- **Optimistic concurrency** — reject appends if the stream version has changed since the aggregate was loaded
+- **Ordered delivery** — events within a stream are returned in append order
 
-```csharp
-// Program.cs
-builder.Services.AddMarten(options =>
-{
-    options.Connection(builder.Configuration.GetConnectionString("Default"));
-    options.Events.StreamIdentity = StreamIdentity.AsString;
-})
-.UseLightweightSessions()
-.AddAsyncDaemon(DaemonMode.HotCold);
-```
-
-Writing events:
+Your event store library handles serialisation, stream management, and concurrency. The handlers work through an abstraction:
 
 ```csharp
-public sealed class PlaceOrderHandler(IDocumentSession session)
+public sealed class PlaceOrderHandler(IEventStore eventStore)
 {
     public async Task HandleAsync(PlaceOrder command, CancellationToken ct)
     {
         var order = new Order();
         var events = order.Place(command.CustomerId, command.Items);
 
-        session.Events.StartStream<Order>($"Order-{order.Id}", events);
-        await session.SaveChangesAsync(ct);
+        await eventStore.AppendAsync($"Order-{order.Id}", events, ct);
     }
 }
 ```
 
-Loading an aggregate:
+Loading and modifying an aggregate:
 
 ```csharp
-public sealed class CancelOrderHandler(IDocumentSession session)
+public sealed class CancelOrderHandler(IEventStore eventStore)
 {
     public async Task HandleAsync(CancelOrder command, CancellationToken ct)
     {
-        var order = await session.Events
-            .AggregateStreamAsync<Order>($"Order-{command.OrderId}", token: ct)
+        var streamId = $"Order-{command.OrderId}";
+
+        var (order, version) = await eventStore.LoadAsync<Order>(streamId, ct)
             ?? throw new NotFoundException(nameof(Order), command.OrderId);
 
         var events = order.Cancel(command.Reason);
 
-        session.Events.Append($"Order-{command.OrderId}", events);
-        await session.SaveChangesAsync(ct);
+        await eventStore.AppendAsync(streamId, events, expectedVersion: version, ct);
     }
 }
 ```
 
-### EventStoreDB
-
-EventStoreDB is a purpose-built event store. It's more operationally complex than Marten (separate infrastructure) but offers built-in projections, subscriptions, and is optimised for event-heavy workloads.
-
-```csharp
-// Writing events
-var eventData = events.Select(e => new EventData(
-    Uuid.NewUuid(),
-    e.GetType().Name,
-    JsonSerializer.SerializeToUtf8Bytes(e)
-)).ToArray();
-
-await client.AppendToStreamAsync(
-    $"Order-{orderId}",
-    StreamState.Any,
-    eventData,
-    cancellationToken: ct);
-
-// Reading and rehydrating
-var result = client.ReadStreamAsync(
-    Direction.Forwards,
-    $"Order-{orderId}",
-    StreamPosition.Start,
-    cancellationToken: ct);
-
-var order = new Order();
-await foreach (var resolved in result)
-{
-    var @event = Deserialise(resolved);
-    order.Apply(@event);
-}
-```
-
-**Choose Marten** if you already use PostgreSQL and want a simpler operational model. **Choose EventStoreDB** if event sourcing is central to your system and you want a purpose-built store with built-in subscriptions.
+The `IEventStore` abstraction is provided by your chosen event store library. Two main options exist in .NET: PostgreSQL-based stores that use JSONB columns (simpler operations, leverages existing infrastructure) and purpose-built event databases (optimised for high-throughput event workloads, built-in subscriptions).
 
 ## Aggregate Design
 
@@ -258,7 +216,7 @@ public sealed record OrderShipped(string TrackingNumber);
 **Event versioning:** Events are a permanent contract. Once persisted, their schema cannot change. When you need to evolve an event:
 
 1. **Add fields** — add new optional fields with defaults. Old events deserialise with the default. This is the safest approach.
-2. **Upcast** — register a transformation that converts old event shapes to new ones during deserialisation. Marten supports this via `IEventUpcaster`.
+2. **Upcast** — register a transformation that converts old event shapes to new ones during deserialisation. Most event store libraries support upcaster registration.
 3. **New event type** — create `ItemAddedV2` for genuinely different semantics. The `Apply` method handles both versions.
 
 Never rename or remove fields from a persisted event type.
@@ -272,7 +230,7 @@ Event sourcing requires projections to answer queries efficiently. Without them,
 Updated within the same transaction as the event append. Consistent but slower writes.
 
 ```csharp
-// Marten inline projection
+// Inline projection
 public sealed class OrderSummaryProjection : SingleStreamProjection<OrderSummary>
 {
     public void Apply(OrderCreated @event, OrderSummary view)
@@ -307,35 +265,19 @@ public sealed class OrderSummary
 }
 ```
 
-Register in Marten:
-
-```csharp
-options.Projections.Add<OrderSummaryProjection>(ProjectionLifecycle.Inline);
-```
+Register inline projections with your event store library so they run within the same transaction as the event append.
 
 ### Async Projections
 
-Updated in the background by a daemon. Eventually consistent but don't slow down writes. Use for read models that can tolerate lag.
-
-```csharp
-options.Projections.Add<OrderSummaryProjection>(ProjectionLifecycle.Async);
-```
-
-Marten's async daemon (`AddAsyncDaemon(DaemonMode.HotCold)`) processes these automatically.
+Updated in the background by a projection daemon/worker. Eventually consistent but don't slow down writes. Use for read models that can tolerate lag. Most event store libraries support both inline and async projection modes via configuration.
 
 ### Cross-Stream Projections
 
 Aggregate data across multiple streams — e.g., "all orders for a customer":
 
 ```csharp
-public sealed class CustomerOrderHistoryProjection : MultiStreamProjection<CustomerOrderHistory, Guid>
+public sealed class CustomerOrderHistoryProjection
 {
-    public CustomerOrderHistoryProjection()
-    {
-        Identity<OrderCreated>(e => e.CustomerId);
-        Identity<OrderSubmitted>(e => e.CustomerId);
-    }
-
     public void Apply(OrderCreated @event, CustomerOrderHistory view)
     {
         view.CustomerId = @event.CustomerId;
@@ -350,6 +292,8 @@ public sealed class CustomerOrderHistoryProjection : MultiStreamProjection<Custo
 }
 ```
 
+Cross-stream projections require the event store to route events from multiple streams to the same projection. Your event store library handles this — you define which event types map to which projection key.
+
 ### Rebuilding Projections
 
 One of event sourcing's superpowers: you can rebuild any projection from scratch by replaying all events. This enables:
@@ -358,61 +302,74 @@ One of event sourcing's superpowers: you can rebuild any projection from scratch
 - Fixing bugs in projection logic and rebuilding with corrected code
 - Changing the read store technology entirely
 
-With Marten:
-
-```csharp
-await using var daemon = await store.BuildProjectionDaemonAsync();
-await daemon.RebuildProjectionAsync<OrderSummaryProjection>(CancellationToken.None);
-```
+Your event store library should provide a rebuild mechanism that replays the full event history through a projection. This is a batch operation — expect it to take time for large event stores.
 
 **Design every projection to be rebuildable.** If rebuilding a projection would take days because it depends on external API calls or side effects, the projection is doing too much.
 
-## Handling Out-of-Order Events
+## Handling Out-of-Order and Duplicate Events
 
-Within a single aggregate stream, events are always ordered — the event store guarantees this. Out-of-order processing is a concern for **cross-stream projections** and **inter-service event consumption** where events from different streams or services arrive in unpredictable order.
+Within a single aggregate stream, events are always ordered — the event store guarantees this. The aggregate's `Apply` method always receives events in sequence. **This section is about projections and inter-service consumers**, where a message broker sits between the event store and the consumer.
 
-### Strategies
+### The Reality of Message Brokers
 
-**1. Idempotent projections with version tracking.** Store the last processed event sequence number per stream. Skip events with a sequence ≤ the stored version:
+Most systems use a cloud message broker (Azure Service Bus, AWS SQS, Kafka, RabbitMQ) to deliver events to projections and downstream services. These brokers give you:
 
-```csharp
-public void Apply(OrderSubmitted @event, CustomerOrderHistory view, IEvent metadata)
-{
-    if (view.ProcessedVersions.ContainsKey(metadata.StreamKey!))
-        return;
+- **At-least-once delivery** — duplicates are guaranteed. The same event will be delivered more than once.
+- **No global ordering** — events from different partitions/queues arrive in unpredictable order.
+- **Concurrent consumers** — multiple instances processing from the same subscription.
 
-    view.TotalSpent += @event.Total;
-    view.ProcessedVersions[metadata.StreamKey!] = metadata.Version;
-}
+These are facts of distributed messaging, not problems you can solve with clever SQL. Any projection strategy must account for all three.
+
+### The Practical Default: Single Consumer, Sequential Processing
+
+**One consumer per projection, processing events sequentially, with a checkpoint.**
+
+```sql
+-- PostgreSQL
+CREATE TABLE projection_checkpoints (
+    projection_name TEXT   PRIMARY KEY,
+    last_position   BIGINT NOT NULL DEFAULT -1
+);
 ```
 
-**2. Eventually consistent read models.** Accept that the projection may be temporarily inconsistent. Design the read model so that applying events in any order converges to the correct state. This works when events are commutative (e.g., incrementing a counter — order doesn't matter).
+The consumer reads events in order from the broker (or directly from the event store via a catch-up subscription), applies each one, and advances the checkpoint in the same transaction:
 
-**3. Buffer and reorder.** Hold events in a buffer and process them in sequence number order. This adds latency but guarantees ordering. Most useful for inter-service consumers:
-
-```csharp
-public sealed class OrderedEventBuffer
-{
-    private readonly SortedDictionary<long, object> _buffer = new();
-    private long _nextExpected = 0;
-
-    public IEnumerable<object> Add(long position, object @event)
-    {
-        _buffer[position] = @event;
-
-        while (_buffer.TryGetValue(_nextExpected, out var next))
-        {
-            _buffer.Remove(_nextExpected);
-            _nextExpected++;
-            yield return next;
-        }
-    }
-}
+```sql
+UPDATE projection_checkpoints
+   SET last_position = @newPos
+ WHERE projection_name = @name
+   AND last_position < @newPos;
 ```
 
-**4. Compensation.** Process events as they arrive, then correct if a later event reveals the ordering was wrong. This is the most complex approach but works when you can't afford to wait.
+If zero rows are affected, the event was already processed (duplicate delivery) — skip it.
 
-**Within a single stream, none of this matters.** Marten and EventStoreDB both guarantee per-stream ordering. The aggregate's `Apply` method always receives events in order.
+This approach is **correct by construction**: one consumer means no concurrency races, sequential processing means no ordering problems, and the checkpoint handles duplicates. It limits throughput to one event at a time per projection, but for most systems this is fast enough — projections are simple writes and a single consumer can process thousands of events per second.
+
+### Scaling Beyond a Single Consumer
+
+If a single consumer genuinely can't keep up, **partition by aggregate/stream ID**. Events for the same aggregate always go to the same consumer instance. This preserves per-aggregate ordering while allowing parallel processing across aggregates.
+
+Most brokers support this natively: Kafka partitions by key, Azure Service Bus sessions, RabbitMQ consistent hash exchange. Configure the partition key to be the stream/aggregate ID.
+
+Each consumer instance tracks its own checkpoint. Since no two instances process events for the same aggregate, there are no concurrency races on projection state.
+
+### Idempotency Is Non-Negotiable
+
+Regardless of strategy, every consumer must handle duplicate delivery. Two approaches:
+
+**1. Idempotent operations.** Design writes so that applying the same event twice produces the same result. `SET status = 'Shipped'` is idempotent. `SET total = 59.98` is idempotent. `SET count = count + 1` is **not** idempotent — a duplicate delivery increments twice.
+
+**2. Processed-event tracking.** Store the event ID in a deduplication table within the same transaction as the projection update:
+
+```sql
+-- PostgreSQL
+INSERT INTO processed_events (event_id, projection_name)
+VALUES (@eventId, @name)
+ON CONFLICT DO NOTHING;
+```
+
+If the insert returns zero rows, the event was already processed — skip it. This works for any operation, including non-idempotent numeric updates, but adds a write per event.
+
 
 ## Data Flow
 
@@ -513,9 +470,9 @@ public void Cancel_ShippedOrder_ThrowsDomainException()
 - Then is the resulting events or exceptions
 - Tests read like business specifications
 
-**Projection tests:** Seed events, run the projection, assert the read model state. Use Marten's test helpers or build projections manually in tests.
+**Projection tests:** Seed events, run the projection, assert the read model state. Use your event store library's test helpers or build projections manually in tests.
 
-**Integration tests:** Use Testcontainers with PostgreSQL (for Marten) or EventStoreDB's Docker image. Test the full write path: send command → verify events appended → verify projections updated.
+**Integration tests:** Use a test container library with your event store's database. Test the full write path: send command → verify events appended → verify projections updated.
 
 ## Common Mistakes
 
@@ -529,12 +486,20 @@ public void Cancel_ShippedOrder_ThrowsDomainException()
 
 5. **Breaking event schemas.** Renaming a field, removing a property, or changing a type in a persisted event breaks rehydration for every aggregate that has that event in its history. Events are immutable contracts. Add fields (with defaults), upcast old versions, or create new event types.
 
-6. **Forgetting snapshots.** An aggregate with 10,000 events takes noticeable time to rehydrate. Implement snapshots from the start for aggregates that will accumulate many events. With Marten, configure `options.Events.UseIdentityMapForInlineAggregates = true` and snapshot intervals.
+6. **Forgetting snapshots.** An aggregate with 10,000 events takes noticeable time to rehydrate. Implement snapshots from the start for aggregates that will accumulate many events. Configure snapshot intervals in your event store library.
 
 7. **Putting business logic in projections.** A projection that calculates discounts based on order history. Projections are read-only transformations. If the calculation matters for business decisions, it belongs in the aggregate's command method.
 
-8. **No concurrency control.** Two commands load the same aggregate simultaneously, both at version 5, both append events. Without optimistic concurrency (expected version checks), one will silently overwrite the other. Both Marten and EventStoreDB support expected version — use it.
+8. **No concurrency control.** Two commands load the same aggregate simultaneously, both at version 5, both append events. Without optimistic concurrency (expected version checks), one will silently overwrite the other. Event store libraries support expected version — use it.
 
 9. **Event Sourcing without CQRS.** Querying the event store directly for read operations means replaying events on every query. This is prohibitively slow for any non-trivial system. Always combine with CQRS ([DSG001](DSG001%20-%20cqrs.md)) — use projections for reads.
 
 10. **Skipping [DSG001](DSG001%20-%20cqrs.md) Level 1.** Teams jump straight to Event Sourcing when Level 1 CQRS (same database, separate read/write code paths) would solve their problem at a fraction of the complexity. Prove you need event history as a first-class concept before adopting this pattern.
+
+## Related Packages
+
+- **Event store:** Marten (PostgreSQL) · EventStoreDB · Equinox
+- **Projections:** Marten async daemon · EventStoreDB projections
+- **Messaging (for publishing events to other services):** MassTransit · NServiceBus · Wolverine
+- **Serialisation:** System.Text.Json · Newtonsoft.Json (for legacy upcasting)
+- **Testing:** xUnit, NUnit · FluentAssertions · Testcontainers

@@ -505,7 +505,7 @@ public sealed class CreateOrderTests
 }
 ```
 
-**Infrastructure.Tests** — integration tests with Testcontainers.
+**Infrastructure.Tests** — integration tests with a test container library.
 
 **Web.Tests** — full HTTP pipeline tests with `WebApplicationFactory`.
 
@@ -521,7 +521,7 @@ public sealed class CreateOrderTests
 
 5. **Forgetting DTOs are per-feature.** `OrderDto` lives in `Orders/DTOs/`, not in a shared `Common/DTOs/` folder. Each feature defines the shape it needs. If two features need different views of an order, they each define their own DTO.
 
-6. **Validators that enforce business rules.** FluentValidation validators in Application should check structural validity (non-empty, correct format, within range). Business rules ("order cannot exceed credit limit") belong in Domain entities, not validators.
+6. **Validators that enforce business rules.** validators in Application should check structural validity (non-empty, correct format, within range). Business rules ("order cannot exceed credit limit") belong in Domain entities, not validators.
 
 7. **Giant feature folders.** If `Orders/` has 30+ files, break it into sub-features: `Orders/Placement/`, `Orders/Fulfilment/`, `Orders/Returns/`. The feature folder should be scannable at a glance.
 
@@ -530,3 +530,10 @@ public sealed class CreateOrderTests
 9. **Making the handler `public`.** Handlers should be `internal sealed`. They are implementation details of the feature — only the command/query record is part of the public contract. The mediator dispatches by scanning the assembly, so the handler doesn't need to be public. Use `InternalsVisibleTo` for test projects.
 
 10. **Missing CancellationToken propagation.** Every `async` method in the handler chain should accept and forward a `CancellationToken`. Repository interfaces should include it in their signatures. Dropping the token silently makes the application unresponsive to client disconnects and shutdown signals.
+
+## Related Packages
+
+- **Mediator:** MediatR · Wolverine · Mediator (source-generated)
+- **Validation:** FluentValidation · System.ComponentModel.DataAnnotations
+- **Testing:** xUnit, NUnit · NSubstitute, Moq · FluentAssertions · Testcontainers · Bogus
+- **Architecture testing:** NetArchTest · ArchUnitNET
