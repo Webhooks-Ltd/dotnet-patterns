@@ -12,7 +12,7 @@ Separate the read (query) and write (command) sides of the application into dist
 - You need **different storage** for reads vs writes — e.g., normalised SQL for writes, denormalised SQL views / Elasticsearch / Redis for reads
 - The domain model is rich enough that forcing queries through it adds complexity without benefit
 
-CQRS is a **design pattern**, not a solution structure. It layers on top of any structural pattern: [STR003](../structural/STR003%20-%20full-clean-architecture.md), [STR004](../structural/STR004%20-%20vertical-slice.md), [STR008](../structural/STR008%20-%20clean-vertical-slice.md), etc.
+CQRS is a **design pattern**, not a solution structure. It layers on top of any structural pattern: [STR003](../structural/STR003%20-%20full-clean-architecture.md), [STR004](../structural/STR004%20-%20vertical-slice.md), [STR008](../structural/STR008%20-%20clean-architecture-feature-folders.md), etc.
 
 **CQRS is not Event Sourcing.** They are orthogonal. CQRS splits reads from writes. Event Sourcing stores state as a sequence of events instead of current-state snapshots. You can use CQRS without Event Sourcing (most systems should). You can use Event Sourcing without CQRS (though it's painful). They compose well together, but treating them as a package deal is a common source of accidental complexity.
 
@@ -72,7 +72,7 @@ graph LR
 
 ## Applying CQRS to Structural Patterns
 
-### Within Clean Architecture ([STR003](../structural/STR003%20-%20full-clean-architecture.md) / [STR008](../structural/STR008%20-%20clean-vertical-slice.md))
+### Within Clean Architecture ([STR003](../structural/STR003%20-%20full-clean-architecture.md) / [STR008](../structural/STR008%20-%20clean-architecture-feature-folders.md))
 
 The Application project already separates Commands and Queries:
 

@@ -25,7 +25,7 @@ A reference library of architecture patterns for .NET/C# projects. Each pattern 
 | [`STR004`](patterns/structural/STR004%20-%20vertical-slice.md) | Vertical Slice | Feature-per-file, each slice owns its full stack |
 | [`STR005`](patterns/structural/STR005%20-%20modular-monolith.md) | Modular Monolith | Independent modules within one deployable, own data, explicit contracts |
 | [`STR006`](patterns/structural/STR006%20-%20hexagonal.md) | Hexagonal (Ports & Adapters) | Domain at centre, ports define all external interaction |
-| [`STR008`](patterns/structural/STR008%20-%20clean-vertical-slice.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
+| [`STR008`](patterns/structural/STR008%20-%20clean-architecture-feature-folders.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
 | [`STR009`](patterns/structural/STR009%20-%20minimal-api.md) | Minimal API | Endpoint-focused, no controllers, explicit route registration |
 | [`STR010`](patterns/structural/STR010%20-%20worker-service.md) | Worker Service | Background processing — queue consumers, scheduled jobs, long-running services |
 | [`DSG001`](patterns/design/DSG001%20-%20cqrs.md) | CQRS | Separate read/write models — applies within any structural pattern |

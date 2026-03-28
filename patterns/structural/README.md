@@ -12,7 +12,7 @@ How to organise a .NET solution at the project and folder level. Each pattern an
 | [`STR004`](STR004%20-%20vertical-slice.md) | Vertical Slice | Feature-per-file, each slice owns its full stack |
 | [`STR005`](STR005%20-%20modular-monolith.md) | Modular Monolith | Independent modules within one deployable, own data, explicit contracts |
 | [`STR006`](STR006%20-%20hexagonal.md) | Hexagonal (Ports & Adapters) | Domain at centre, ports define all external interaction |
-| [`STR008`](STR008%20-%20clean-vertical-slice.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
+| [`STR008`](STR008%20-%20clean-architecture-feature-folders.md) | Clean Architecture + Feature Folders | Multi-project Clean Architecture with CQRS, Application organised by feature |
 | [`STR009`](STR009%20-%20minimal-api.md) | Minimal API | Endpoint-focused, no controllers, explicit route registration |
 | [`STR010`](STR010%20-%20worker-service.md) | Worker Service | Background processing — queue consumers, scheduled jobs, long-running services |
 
@@ -26,7 +26,7 @@ How to organise a .NET solution at the project and folder level. Each pattern an
 | [`STR004`](STR004%20-%20vertical-slice.md) | Vertical Slice | 2–8 | Low–Medium | 1 | Features are independent; tired of cross-layer changes |
 | [`STR005`](STR005%20-%20modular-monolith.md) | Modular Monolith | 5–20 | High | 1 | Multiple bounded contexts, want service-like autonomy without distributed overhead |
 | [`STR006`](STR006%20-%20hexagonal.md) | Hexagonal | 3–10 | High | 1+ | Multiple entry points (API, queue, CLI) to the same domain |
-| [`STR008`](STR008%20-%20clean-vertical-slice.md) | Clean + Features | 3–8 | Medium–High | 1+ | Want STR003's rigour with feature-level co-location of commands, queries, and DTOs |
+| [`STR008`](STR008%20-%20clean-architecture-feature-folders.md) | Clean + Features | 3–8 | Medium–High | 1+ | Want STR003's rigour with feature-level co-location of commands, queries, and DTOs |
 | [`STR009`](STR009%20-%20minimal-api.md) | Minimal API | 1–4 | Low–Medium | 1 | Lightweight API, no MVC overhead, endpoint-focused |
 | [`STR010`](STR010%20-%20worker-service.md) | Worker Service | 1–4 | Any | 1 | Background processing — no HTTP pipeline |
 
