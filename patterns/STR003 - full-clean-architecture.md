@@ -28,6 +28,9 @@ MyApp/
 ├── src/
 │   ├── MyApp.Domain/
 │   │   ├── MyApp.Domain.csproj          ← references NOTHING
+│   │   ├── Common/
+│   │   │   ├── BaseEntity.cs
+│   │   │   └── IDomainEvent.cs
 │   │   ├── Entities/
 │   │   │   ├── Order.cs
 │   │   │   ├── OrderItem.cs
@@ -38,15 +41,11 @@ MyApp/
 │   │   ├── Enums/
 │   │   │   └── OrderStatus.cs
 │   │   ├── Events/
-│   │   │   ├── IDomainEvent.cs
 │   │   │   ├── OrderPlacedEvent.cs
 │   │   │   └── OrderCancelledEvent.cs
 │   │   ├── Exceptions/
 │   │   │   ├── DomainException.cs
 │   │   │   └── InsufficientStockException.cs
-│   │   ├── Interfaces/
-│   │   │   ├── IOrderRepository.cs
-│   │   │   └── IProductRepository.cs
 │   │   └── Services/
 │   │       └── PricingService.cs
 │   │
@@ -56,10 +55,16 @@ MyApp/
 │   │   ├── Common/
 │   │   │   ├── Behaviours/
 │   │   │   │   ├── LoggingBehaviour.cs
+│   │   │   │   ├── UnhandledExceptionBehaviour.cs
 │   │   │   │   └── ValidationBehaviour.cs
-│   │   │   └── Interfaces/
-│   │   │       ├── IDateTimeProvider.cs
-│   │   │       └── ICurrentUserService.cs
+│   │   │   ├── Interfaces/
+│   │   │   │   ├── ICommand.cs
+│   │   │   │   ├── IQuery.cs
+│   │   │   │   ├── IApplicationDbContext.cs
+│   │   │   │   ├── IDateTimeProvider.cs
+│   │   │   │   └── ICurrentUserService.cs
+│   │   │   └── Models/
+│   │   │       └── Result.cs
 │   │   ├── Orders/
 │   │   │   ├── Commands/
 │   │   │   │   ├── CreateOrder/
@@ -78,20 +83,22 @@ MyApp/
 │   │   │   │       ├── ListOrdersQuery.cs
 │   │   │   │       ├── ListOrdersQueryHandler.cs
 │   │   │   │       └── OrderSummaryDto.cs
-│   │   │   └── EventHandlers/
-│   │   │       └── OrderPlacedEventHandler.cs
+│   │   │   ├── EventHandlers/
+│   │   │   │   └── OrderPlacedEventHandler.cs
+│   │   │   └── IOrderRepository.cs
 │   │   └── Products/
-│   │       └── Queries/
-│   │           └── GetProductById/
-│   │               ├── GetProductByIdQuery.cs
-│   │               ├── GetProductByIdQueryHandler.cs
-│   │               └── ProductDto.cs
+│   │       ├── Queries/
+│   │       │   └── GetProductById/
+│   │       │       ├── GetProductByIdQuery.cs
+│   │       │       ├── GetProductByIdQueryHandler.cs
+│   │       │       └── ProductDto.cs
+│   │       └── IProductRepository.cs
 │   │
 │   ├── MyApp.Infrastructure/
 │   │   ├── MyApp.Infrastructure.csproj    ← references Application, Domain
 │   │   ├── DependencyInjection.cs
 │   │   ├── Data/
-│   │   │   ├── AppDbContext.cs
+│   │   │   ├── AppDbContext.cs            ← implements IApplicationDbContext
 │   │   │   ├── Configurations/
 │   │   │   │   ├── OrderConfiguration.cs
 │   │   │   │   └── ProductConfiguration.cs
@@ -125,9 +132,9 @@ MyApp/
     └── MyApp.Web.Tests/
 ```
 
-**MyApp.Domain** — Entities with behaviour, value objects, domain events, domain exceptions, repository interfaces, and domain services. Zero NuGet packages (except possibly a primitives library). This project defines the ubiquitous language.
+**MyApp.Domain** — Entities with behaviour, value objects, domain events, domain exceptions, and domain services. Zero NuGet packages (except possibly a primitives library). This project defines the ubiquitous language. Repository interfaces live in Application, not here — the Domain layer has no concept of persistence.
 
-**MyApp.Application** — Commands, queries, handlers, validators, DTOs, pipeline behaviours. Uses a mediator to dispatch commands and queries to their handlers. Defines application-level interfaces (`IDateTimeProvider`, `ICurrentUserService`). Contains no business rules — only orchestration.
+**MyApp.Application** — Commands, queries, handlers, validators, DTOs, pipeline behaviours. Uses a mediator to dispatch commands and queries to their handlers. Defines **all** interfaces that Infrastructure implements: repository interfaces (`IOrderRepository`), `IApplicationDbContext` for direct query access, and application services (`IDateTimeProvider`, `ICurrentUserService`). Contains no business rules — only orchestration.
 
 **MyApp.Infrastructure** — EF Core, repository implementations, external service clients, infrastructure service implementations. Everything that talks to something outside the process.
 
@@ -142,13 +149,20 @@ graph TD
     Application --> Domain[MyApp.Domain]
     Infrastructure --> Application
     Infrastructure --> Domain
+    Web -.-x Domain
+    style Domain fill:#2d5016,stroke:#4a7c23
+    style Application fill:#1a3a5c,stroke:#2e6699
+    style Infrastructure fill:#5c3a1a,stroke:#996633
+    style Web fill:#3a1a5c,stroke:#6633cc
 ```
+
+The dashed crossed arrow (`-.-x`) marks the **forbidden** reference: Web must never reference Domain directly.
 
 **The iron rules:**
 
 - `Domain` has **zero** project references. It depends on nothing.
 - `Application` references **only** `Domain`.
-- `Infrastructure` references `Application` and `Domain`. It implements the interfaces they define.
+- `Infrastructure` references `Application` and `Domain`. It implements the interfaces defined in Application (`IOrderRepository`, `IApplicationDbContext`, `IDateTimeProvider`, etc.).
 - `Web` references `Application` (to send commands/queries) and `Infrastructure` (only to call `AddInfrastructure()` in `Program.cs`).
 - **Web MUST NOT reference Domain directly** for entity access. It works through Application DTOs.
 - **Application MUST NOT reference Infrastructure.** If a handler needs to send email, it depends on `IEmailSender` (defined in Application), implemented in Infrastructure.
@@ -163,8 +177,9 @@ These rules are enforced by the compiler through `.csproj` `<ProjectReference>` 
 | Value Object | `Money`, `Address` | Domain/ValueObjects |
 | Domain Event | `{Entity}{Past-tense verb}Event` | Domain/Events |
 | Domain Exception | `{Noun}Exception` | Domain/Exceptions |
-| Repository Interface | `I{Entity}Repository` | Domain/Interfaces |
 | Domain Service | `{Noun}Service` | Domain/Services |
+| Repository Interface | `I{Entity}Repository` | Application/{Feature} |
+| Application DbContext | `IApplicationDbContext` | Application/Common/Interfaces |
 | Command | `{Verb}{Entity}Command` | Application/{Feature}/Commands |
 | Command Handler | `{Verb}{Entity}CommandHandler` | Application/{Feature}/Commands |
 | Validator | `{Verb}{Entity}CommandValidator` | Application/{Feature}/Commands |
@@ -179,26 +194,45 @@ Each command/query gets its own **folder** containing the command/query record, 
 
 ## Key Abstractions
 
+Base entity with domain event support (in `Domain/Common/`):
+
+```csharp
+public abstract class BaseEntity
+{
+    private readonly List<IDomainEvent> _domainEvents = [];
+
+    public Guid Id { get; protected set; }
+    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
+
+    public void AddDomainEvent(IDomainEvent domainEvent) =>
+        _domainEvents.Add(domainEvent);
+
+    public void ClearDomainEvents() => _domainEvents.Clear();
+}
+```
+
 Domain entity with behaviour:
 
 ```csharp
-public class Order
+public class Order : BaseEntity
 {
     private readonly List<OrderItem> _items = [];
-    private readonly List<IDomainEvent> _domainEvents = [];
 
-    public Guid Id { get; private set; }
     public OrderStatus Status { get; private set; }
-    public Address ShippingAddress { get; private set; }
+    public Address ShippingAddress { get; private set; } = null!;
     public Money Total => CalculateTotal();
     public IReadOnlyList<OrderItem> Items => _items.AsReadOnly();
-    public IReadOnlyList<IDomainEvent> DomainEvents => _domainEvents.AsReadOnly();
 
-    public Order(Address shippingAddress)
+    private Order() { }
+
+    public static Order Create(Address shippingAddress)
     {
-        Id = Guid.NewGuid();
-        Status = OrderStatus.Draft;
-        ShippingAddress = shippingAddress;
+        return new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Draft,
+            ShippingAddress = shippingAddress
+        };
     }
 
     public void AddItem(Product product, int quantity)
@@ -217,7 +251,7 @@ public class Order
             throw new DomainException("Cannot submit an empty order.");
 
         Status = OrderStatus.Submitted;
-        _domainEvents.Add(new OrderPlacedEvent(Id));
+        AddDomainEvent(new OrderPlacedEvent(Id));
     }
 
     private Money CalculateTotal() =>
@@ -225,7 +259,31 @@ public class Order
 }
 ```
 
-Command and handler (define `ICommand<T>` / `ICommandHandler<T, TResult>` in `Application/Common/`, or use the interfaces from your chosen mediator library — MediatR, Wolverine, etc.):
+The `private` parameterless constructor allows EF Core to materialise the entity. The static `Create` factory method enforces invariants on construction. `BaseEntity` centralises domain event tracking so the infrastructure layer can collect and dispatch events from any entity.
+
+Command/query marker interfaces (in `Application/Common/Interfaces/`):
+
+```csharp
+public interface ICommand<out TResult> { }
+
+public interface ICommandHandler<in TCommand, TResult>
+    where TCommand : ICommand<TResult>
+{
+    Task<TResult> HandleAsync(TCommand command, CancellationToken cancellationToken);
+}
+
+public interface IQuery<out TResult> { }
+
+public interface IQueryHandler<in TQuery, TResult>
+    where TQuery : IQuery<TResult>
+{
+    Task<TResult> HandleAsync(TQuery query, CancellationToken cancellationToken);
+}
+```
+
+These are your own abstractions — not MediatR's `IRequest<T>`. Your mediator implementation dispatches to these handlers. If you use MediatR or Wolverine, replace these with the library's equivalents.
+
+Command and handler:
 
 ```csharp
 public sealed record CreateOrderCommand(
@@ -234,34 +292,116 @@ public sealed record CreateOrderCommand(
 
 public sealed class CreateOrderCommandHandler(
     IOrderRepository orders,
-    IProductRepository products) : ICommandHandler<CreateOrderCommand, Guid>
+    IProductRepository products,
+    IApplicationDbContext dbContext) : ICommandHandler<CreateOrderCommand, Guid>
 {
     public async Task<Guid> HandleAsync(
         CreateOrderCommand command, CancellationToken cancellationToken)
     {
         var address = new Address(command.Street, command.City, command.PostCode);
-        var order = new Order(address);
+        var order = Order.Create(address);
 
         foreach (var item in command.Items)
         {
-            var product = await products.GetByIdAsync(item.ProductId)
+            var product = await products.GetByIdAsync(item.ProductId, cancellationToken)
                 ?? throw new NotFoundException(nameof(Product), item.ProductId);
             order.AddItem(product, item.Quantity);
         }
 
         order.Submit();
-        await orders.AddAsync(order);
-        await orders.SaveChangesAsync(cancellationToken);
+        orders.Add(order);
+        await dbContext.SaveChangesAsync(cancellationToken);
 
         return order.Id;
     }
 }
 ```
 
-DI registration pattern:
+`IApplicationDbContext` exposes `SaveChangesAsync` and `DbSet<T>` properties. Repositories handle query encapsulation but do **not** own `SaveChanges` — that belongs to the unit of work (`DbContext`), which the handler coordinates. This keeps the "when to persist" decision at the orchestration level where it belongs.
+
+## Pipeline Behaviours
+
+Pipeline behaviours are the decorator chain that wraps every command/query handler. They are the Clean Architecture equivalent of middleware — cross-cutting concerns applied consistently without polluting handler logic.
+
+A behaviour wraps the handler call:
 
 ```csharp
-// Program.cs
+public interface IPipelineBehaviour<in TRequest, TResult>
+{
+    Task<TResult> HandleAsync(
+        TRequest request,
+        Func<Task<TResult>> next,
+        CancellationToken cancellationToken);
+}
+```
+
+Validation behaviour (runs FluentValidation rules before the handler):
+
+```csharp
+public sealed class ValidationBehaviour<TRequest, TResult>(
+    IEnumerable<IValidator<TRequest>> validators) : IPipelineBehaviour<TRequest, TResult>
+{
+    public async Task<TResult> HandleAsync(
+        TRequest request,
+        Func<Task<TResult>> next,
+        CancellationToken cancellationToken)
+    {
+        if (!validators.Any())
+            return await next();
+
+        var context = new ValidationContext<TRequest>(request);
+
+        var failures = (await Task.WhenAll(
+                validators.Select(v => v.ValidateAsync(context, cancellationToken))))
+            .SelectMany(r => r.Errors)
+            .Where(f => f is not null)
+            .ToList();
+
+        if (failures.Count != 0)
+            throw new ValidationException(failures);
+
+        return await next();
+    }
+}
+```
+
+Unhandled exception behaviour (structured logging for any handler failure):
+
+```csharp
+public sealed class UnhandledExceptionBehaviour<TRequest, TResult>(
+    ILogger<UnhandledExceptionBehaviour<TRequest, TResult>> logger)
+    : IPipelineBehaviour<TRequest, TResult>
+{
+    public async Task<TResult> HandleAsync(
+        TRequest request,
+        Func<Task<TResult>> next,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await next();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Unhandled exception for {RequestType}: {@Request}",
+                typeof(TRequest).Name, request);
+            throw;
+        }
+    }
+}
+```
+
+Behaviours are registered in order. The outermost behaviour executes first:
+
+```
+Logging → Validation → [Handler]
+```
+
+If you use MediatR, these implement `IPipelineBehavior<TRequest, TResponse>`. The concept is identical.
+
+## DI Registration
+
+```csharp
 builder.Services
     .AddApplication()      // mediator, validators, behaviours
     .AddInfrastructure(builder.Configuration);  // DbContext, repositories, services
@@ -281,27 +421,26 @@ OrdersController.Create(CreateOrderRequest dto)
 Mediator dispatches CreateOrderCommand
     │
     ▼
-ValidationBehaviour<CreateOrderCommand>
-    │  runs FluentValidation rules
+UnhandledExceptionBehaviour → ValidationBehaviour
+    │  pipeline behaviours execute in registration order
     ▼
-CreateOrderCommandHandler.Handle()
+CreateOrderCommandHandler.HandleAsync()
     │  loads Product entities via IProductRepository
-    │  creates Order entity, calls order.AddItem(), order.Submit()
-    │  persists via IOrderRepository
+    │  creates Order via Order.Create(), calls order.AddItem(), order.Submit()
+    │  calls orders.Add(order)
+    │  calls dbContext.SaveChangesAsync()
     ▼
-OrderRepository.AddAsync() → AppDbContext.SaveChangesAsync()
+AppDbContext.SaveChangesAsync()
+    │  EF Core persists the Order to the database
+    ▼
+DomainEventDispatcherInterceptor (SaveChangesInterceptor)
+    │  AFTER SaveChanges succeeds: collects domain events from tracked entities,
+    │  clears them, then dispatches each event via the mediator
+    ▼
+OrderPlacedEventHandler handles the event (e.g., queues confirmation email)
     │
     ▼
-DomainEventDispatcherInterceptor catches SaveChanges
-    │  dispatches OrderPlacedEvent via mediator
-    ▼
-OrderPlacedEventHandler handles the event (e.g., sends confirmation email)
-    │
-    ▼
-Guid returned up the stack
-    │
-    ▼
-Controller returns CreatedAtAction(201, { orderId })
+Guid returned up the stack → Controller returns CreatedAtAction(201)
 ```
 
 **Query (read) flow — `GET /api/orders/{id}`:**
@@ -316,20 +455,67 @@ OrdersController.GetById(Guid id)
 Mediator dispatches GetOrderByIdQuery
     │
     ▼
-GetOrderByIdQueryHandler.Handle()
-    │  queries via IOrderRepository or IAppDbContext directly
-    │  maps entity → OrderDto
+GetOrderByIdQueryHandler.HandleAsync()
+    │  queries via IApplicationDbContext (DbSet + LINQ projection)
+    │  projects directly to OrderDto — no entity materialisation
     ▼
-OrderDto returned
-    │
-    ▼
-Controller maps OrderDto → OrderResponse
-    │
-    ▼
-HTTP 200 OK
+OrderDto returned → Controller maps to OrderResponse → HTTP 200 OK
 ```
 
-Queries can bypass the repository and query the DbContext directly for read performance. This is acceptable because queries don't mutate state.
+Queries should inject `IApplicationDbContext` and project directly to DTOs using `.Select()`. This avoids materialising full entity graphs and bypasses the repository entirely. This is acceptable — and encouraged — because queries don't mutate state. Repositories are for commands where you need aggregate loading and change tracking.
+
+## Domain Event Dispatch
+
+Domain events are dispatched **after** `SaveChanges` succeeds, never before. This prevents side effects (sending emails, publishing messages) for data that was never persisted.
+
+The interceptor collects events from all tracked entities, clears them, and dispatches:
+
+```csharp
+public sealed class DomainEventDispatcherInterceptor(IPublisher publisher) : SaveChangesInterceptor
+{
+    public override async ValueTask<int> SavedChangesAsync(
+        SaveChangesCompletedEventData eventData,
+        int result,
+        CancellationToken cancellationToken = default)
+    {
+        if (eventData.Context is not null)
+            await DispatchDomainEventsAsync(eventData.Context, cancellationToken);
+
+        return result;
+    }
+
+    private async Task DispatchDomainEventsAsync(
+        DbContext context, CancellationToken cancellationToken)
+    {
+        var entities = context.ChangeTracker
+            .Entries<BaseEntity>()
+            .Where(e => e.Entity.DomainEvents.Count != 0)
+            .Select(e => e.Entity)
+            .ToList();
+
+        var domainEvents = entities.SelectMany(e => e.DomainEvents).ToList();
+
+        foreach (var entity in entities)
+            entity.ClearDomainEvents();
+
+        foreach (var domainEvent in domainEvents)
+            await publisher.PublishAsync(domainEvent, cancellationToken);
+    }
+}
+```
+
+`IPublisher` is your own interface (defined in Application) or your mediator library's publish interface. The key point: the interceptor dispatches events one-by-one, not in parallel, so that handler ordering is deterministic and failures are attributable.
+
+This uses `SavedChangesAsync` (past tense — fires after commit), not `SavingChangesAsync` (fires before). The events are cleared before dispatch to prevent re-dispatch if a handler triggers another `SaveChanges`.
+
+Register the interceptor on the `DbContext`:
+
+```csharp
+services.AddDbContext<AppDbContext>((sp, options) =>
+{
+    options.AddInterceptors(sp.GetRequiredService<DomainEventDispatcherInterceptor>());
+});
+```
 
 ## Where Business Logic Lives
 
@@ -362,7 +548,7 @@ tests/
 │       └── GetOrderByIdQueryHandlerTests.cs
 │
 ├── MyApp.Infrastructure.Tests/
-│   ├── MyApp.Infrastructure.Tests.csproj  ← references Infrastructure, Domain
+│   ├── MyApp.Infrastructure.Tests.csproj  ← references Infrastructure, Application, Domain
 │   └── Repositories/
 │       └── OrderRepositoryTests.cs
 │
@@ -374,13 +560,13 @@ tests/
         └── ProductsEndpointTests.cs
 ```
 
-**Domain.Tests** — Pure unit tests. No mocks, no DI, no database. Test entity behaviour, value object equality, domain service calculations. These run in milliseconds and are the highest-value tests.
+**Domain.Tests** — Pure unit tests. No mocks, no DI, no database. Test entity behaviour, value object equality and validation, domain service calculations, and invariant enforcement. These run in milliseconds and are the highest-value tests. If you're writing mocks in a domain test, business logic has leaked out of the domain.
 
-**Application.Tests** — Handler tests with mocked repositories (NSubstitute). Verify that the handler calls domain methods in the right order and returns the right result.
+**Application.Tests** — Handler tests with mocked repositories and `IApplicationDbContext` (via NSubstitute or similar). Verify orchestration: does the handler load the right data, call the right domain methods, and persist correctly? Also test validators independently — each validator gets its own test class verifying valid/invalid inputs.
 
-**Infrastructure.Tests** — Integration tests against a real database (Testcontainers with SQL Server or PostgreSQL). Test that EF Core configurations, repositories, and interceptors work correctly.
+**Infrastructure.Tests** — Integration tests against a real database (Testcontainers with SQL Server or PostgreSQL). Test EF Core entity configurations (column mappings, relationships, value conversions), repository query behaviour, and the domain event dispatcher interceptor. These are slower and fewer in number.
 
-**Web.Tests** — API integration tests using `WebApplicationFactory<Program>`. Test the full HTTP pipeline including serialisation, middleware, and response codes.
+**Web.Tests** — API integration tests using `WebApplicationFactory<Program>`. Test the full HTTP pipeline: routing, model binding, serialisation, authentication/authorisation, middleware, and response codes. Use a real database (Testcontainers) or replace infrastructure with test doubles depending on what you're testing.
 
 ## Common Mistakes
 
@@ -390,9 +576,9 @@ tests/
 
 3. **Web project referencing Domain entities directly.** A controller returns `Order` as the response. Now the API is coupled to the domain model. Controllers work with Application DTOs and API-specific request/response types.
 
-4. **Application referencing Infrastructure.** A handler injects `AppDbContext` directly instead of using `IOrderRepository`. This violates the dependency rule. Define an interface in Application or Domain; implement it in Infrastructure.
+4. **Application referencing Infrastructure.** A handler injects `AppDbContext` directly instead of using `IApplicationDbContext` or `IOrderRepository`. This violates the dependency rule. Define the interface in Application; implement it in Infrastructure.
 
-5. **Over-abstracting the mediator.** Wrapping your mediator library's interfaces in additional layers of abstraction. If your library provides `IRequest<T>` and `IRequestHandler<T, TResult>`, use them directly rather than wrapping them in project-specific interfaces that add no value.
+5. **Leaking mediator library types into your domain.** If you use MediatR, your commands implement `IRequest<T>` — that's fine, it's a marker interface in the Application layer. But don't let `IMediator` or `IPublisher` creep into Domain entities or services. The domain raises events by adding them to `BaseEntity.DomainEvents`; the infrastructure dispatches them. If you define your own `ICommand<T>` / `ICommandHandler<T, TResult>` interfaces (as shown above), you're already decoupled from the library — but make sure you're not maintaining two parallel abstraction layers for the same thing.
 
 6. **One handler per CRUD operation for a simple entity.** If an entity is genuinely CRUD (no business rules, no invariants), don't force it through command/query handlers. Consider a simpler approach for that entity, or accept that not every entity needs the full ceremony.
 
@@ -400,4 +586,10 @@ tests/
 
 8. **Shared DTOs between commands and queries.** `OrderDto` used in both `CreateOrderCommand` and `GetOrderByIdQuery`. Commands represent intent; queries represent views. They evolve independently. Keep them separate even if they look identical today.
 
-9. **Circular project references.** Infrastructure needs something from Application, and Application needs something from Infrastructure. This means an interface is in the wrong place. The interface always goes in the inner layer (Domain or Application); the implementation goes in the outer layer (Infrastructure).
+9. **Circular project references.** Infrastructure needs something from Application, and Application needs something from Infrastructure. This means an interface is in the wrong place. The interface always goes in the inner layer (Application); the implementation goes in the outer layer (Infrastructure).
+
+10. **SaveChanges buried in repositories.** If `IOrderRepository` exposes `SaveChangesAsync()`, you've scattered the unit of work boundary. A handler that calls two repositories now has ambiguous save semantics. `SaveChanges` belongs on `IApplicationDbContext` — the handler calls it once at the end, making the transaction boundary explicit.
+
+11. **Forgetting CancellationToken propagation.** Every async method from the controller down to the repository should accept and forward `CancellationToken`. If a client disconnects, you want the entire pipeline to stop — not continue running a database query for a response nobody will receive.
+
+12. **Putting repository interfaces in Domain.** This is a common alternative, but in Full Clean Architecture the Domain has no concept of persistence. Repository interfaces belong in Application — they define the data access the application layer needs. The Domain layer contains only business concepts: entities, value objects, events, and domain services.

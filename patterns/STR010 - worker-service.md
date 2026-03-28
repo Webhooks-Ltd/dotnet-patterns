@@ -16,6 +16,7 @@ Background processing architecture for queue consumers, scheduled jobs, and long
 
 - You also need HTTP endpoints — use an API pattern ([STR001](STR001%20-%20n-tier.md), [STR009](STR009%20-%20minimal-api.md)) with `IHostedService` for background work within the same process
 - The job is a one-off or ad-hoc task — use a console app
+- The job runs on a cron schedule and exits — use a console app triggered by OS scheduler, Kubernetes CronJob, or Azure Container Apps Jobs. A worker service that sleeps 23 hours between runs is wasting resources
 - You need a UI — this is a headless service
 
 ## Solution Structure
@@ -71,6 +72,8 @@ MyApp/
 
 **Infrastructure/** — DI registration, health checks, telemetry configuration.
 
+The worker project should reference `Microsoft.Extensions.Hosting`. For OS service integration, add `Microsoft.Extensions.Hosting.WindowsServices` and/or `Microsoft.Extensions.Hosting.Systemd`. These are lightweight packages — not the full ASP.NET Core stack.
+
 ## Dependency Rules
 
 ```mermaid
@@ -79,12 +82,14 @@ graph TD
     Consumers --> Services
     Services --> Data[Data/DbContext]
     Services --> Models
+    Workers --> Models
+    Consumers --> Models
     Workers -.-x Consumers
-    linkStyle 4 stroke:red
+    linkStyle 6 stroke:red
 ```
 
-- Workers and consumers depend on service interfaces
-- Services depend on data access
+- Workers and consumers depend on service interfaces and models (for message contracts / DTOs)
+- Services depend on data access and models
 - **Workers do not call consumers and vice versa** — they are independent entry points
 - **Workers and consumers must not contain business logic** — they are trigger mechanisms
 
@@ -94,16 +99,15 @@ graph TD
 |---------|-----------|---------|
 | Worker | `{Purpose}Worker` | `OrderProcessingWorker` |
 | Consumer | `{EventName}Consumer` | `OrderPlacedConsumer` |
-| Service interface | `I{Noun}` | `IOrderProcessor` |
-| Service implementation | `{Noun}` | `OrderProcessor` |
+| Service interface | `I{Name}` | `IOrderProcessor` |
+| Service implementation | `{Name}` | `OrderProcessor` |
 | Health check | `{Concern}HealthCheck` | `WorkerHealthCheck` |
 
 ## Key Abstractions
 
-A `BackgroundService` worker with a timed loop:
+A `BackgroundService` worker with a timed loop using `PeriodicTimer` (.NET 6+):
 
 ```csharp
-// Workers/DataCleanupWorker.cs
 public sealed class DataCleanupWorker(
     IServiceScopeFactory scopeFactory,
     ILogger<DataCleanupWorker> logger) : BackgroundService
@@ -112,11 +116,13 @@ public sealed class DataCleanupWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        using var timer = new PeriodicTimer(Interval);
+
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
-                using var scope = scopeFactory.CreateScope();
+                await using var scope = scopeFactory.CreateAsyncScope();
                 var cleaner = scope.ServiceProvider.GetRequiredService<IDataCleaner>();
                 var deleted = await cleaner.CleanExpiredRecordsAsync(stoppingToken);
                 logger.LogInformation("Cleaned {Count} expired records", deleted);
@@ -125,17 +131,18 @@ public sealed class DataCleanupWorker(
             {
                 logger.LogError(ex, "Data cleanup failed");
             }
-
-            await Task.Delay(Interval, stoppingToken);
         }
     }
 }
 ```
 
+Prefer `PeriodicTimer` over `while (!token.IsCancellationRequested) { ... await Task.Delay(...) }`. `PeriodicTimer` handles cancellation cleanly (returns `false` instead of throwing), avoids timer drift, and produces cleaner code. Use `CreateAsyncScope()` over `CreateScope()` when the resolved services implement `IAsyncDisposable`.
+
+**Important:** If `ExecuteAsync` returns (either normally or via an unhandled exception), the host will shut down in .NET 8+. This is a change from earlier versions where a completed `ExecuteAsync` was silently ignored. A timed worker should never exit its loop unless cancellation is requested.
+
 A queue consumer (using MassTransit as an example — adapt for your library):
 
 ```csharp
-// Consumers/OrderPlacedConsumer.cs
 public sealed class OrderPlacedConsumer(
     IOrderProcessor processor,
     ILogger<OrderPlacedConsumer> logger) : IConsumer<OrderPlacedEvent>
@@ -153,6 +160,9 @@ public sealed class OrderPlacedConsumer(
 ```csharp
 var builder = Host.CreateApplicationBuilder(args);
 
+builder.Services.AddWindowsService();
+builder.Services.AddSystemd();
+
 builder.Services.AddHostedService<DataCleanupWorker>();
 builder.Services.AddHostedService<OrderProcessingWorker>();
 
@@ -169,7 +179,9 @@ var host = builder.Build();
 host.Run();
 ```
 
-**Critical: scoped services in workers.** `BackgroundService` is a singleton. EF Core's `DbContext` is scoped. You **must** create a scope manually using `IServiceScopeFactory` inside the worker loop. Injecting `DbContext` directly into a `BackgroundService` constructor will use a single instance for the lifetime of the application.
+`AddWindowsService()` (from `Microsoft.Extensions.Hosting.WindowsServices`) and `AddSystemd()` (from `Microsoft.Extensions.Hosting.Systemd`) are safe to call unconditionally — they only activate when actually running as a Windows Service or under systemd respectively. They set the content root correctly and hook into OS lifecycle events.
+
+**Critical: scoped services in workers.** `BackgroundService` is a singleton. EF Core's `DbContext` is scoped by default. You **must** create a scope manually using `IServiceScopeFactory` inside the worker loop. Injecting `DbContext` directly into a `BackgroundService` constructor will silently reuse a single instance for the entire application lifetime — accumulating tracked entities, leaking memory, and returning stale data.
 
 ## Data Flow
 
@@ -197,7 +209,7 @@ Message acknowledged → next message
 **Scheduled worker flow:**
 
 ```
-Timer fires (every N minutes/hours)
+PeriodicTimer tick (every N minutes/hours)
     │
     ▼
 DataCleanupWorker.ExecuteAsync loop iteration
@@ -208,8 +220,57 @@ IDataCleaner.CleanExpiredRecordsAsync()
     │  deletes them
     │  returns count
     ▼
-Log result → await delay → loop
+Log result → await next tick → loop
 ```
+
+## Health Checks
+
+Worker services have no HTTP pipeline, so health checks need a different exposure strategy than APIs. Two options:
+
+**Option 1: TCP health check endpoint** — add a minimal TCP listener. Useful for container orchestrators (Kubernetes liveness/readiness probes).
+
+```csharp
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<WorkerHealthCheck>("worker");
+
+builder.Services.Configure<HealthCheckPublisherOptions>(options =>
+{
+    options.Delay = TimeSpan.FromSeconds(5);
+    options.Period = TimeSpan.FromSeconds(30);
+});
+```
+
+For Kubernetes, the simplest approach is to add `AspNetCore.HealthChecks.Publisher.Prometheus` or write health status to a file that a `livenessProbe.exec` command can check.
+
+**Option 2: Minimal health endpoint** — add a single `/healthz` endpoint. This requires adding `WebApplication` instead of the generic host, which adds HTTP overhead but gives you a standard health URL.
+
+**Implementing the health check itself:** Track the last successful execution time in the worker and check it in the health check.
+
+```csharp
+public sealed class WorkerHealthCheck(
+    TimeProvider timeProvider) : IHealthCheck
+{
+    private long _lastHeartbeatTicks;
+    private readonly TimeSpan _maxSilence = TimeSpan.FromMinutes(10);
+
+    public void RecordHeartbeat() =>
+        Interlocked.Exchange(ref _lastHeartbeatTicks, timeProvider.GetUtcNow().UtcTicks);
+
+    public Task<HealthCheckResult> CheckHealthAsync(
+        HealthCheckContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var lastTicks = Interlocked.Read(ref _lastHeartbeatTicks);
+        var elapsed = timeProvider.GetUtcNow() - new DateTimeOffset(lastTicks, TimeSpan.Zero);
+        return Task.FromResult(elapsed > _maxSilence
+            ? HealthCheckResult.Unhealthy($"No heartbeat for {elapsed}")
+            : HealthCheckResult.Healthy());
+    }
+}
+```
+
+Register the health check as a singleton so the worker and the health check infrastructure share the same instance. The worker calls `RecordHeartbeat()` after each successful iteration.
 
 ## Where Business Logic Lives
 
@@ -251,9 +312,11 @@ public async Task ProcessAsync_CompletesOrder_WhenPaymentConfirmed()
 }
 ```
 
-**Integration tests for consumers** — test message handling end-to-end. Use an in-memory transport or Testcontainers with a real message broker. Publish a message, verify the consumer processed it correctly.
+**Integration tests for consumers** — test message handling end-to-end. MassTransit provides an in-memory test harness (`InMemoryTestHarness` / `TestHarness`). For other libraries, use Testcontainers with a real broker (RabbitMQ, Redis). Publish a message, assert the consumer processed it and the expected side effects occurred.
 
-**Don't unit test `BackgroundService` timing logic.** The loop, the delay, the scope creation — these are infrastructure concerns. Test the services they call.
+**Don't unit test `BackgroundService` timing logic.** The loop, the timer, the scope creation — these are infrastructure concerns. Test the services they call. If you find yourself wanting to test that the worker "runs every hour," you're testing the framework, not your code.
+
+**If you must test a worker directly** — for example, to verify it handles exceptions without crashing — inject `TimeProvider.System` via DI and use `FakeTimeProvider` in tests to control time without real delays.
 
 ## Common Mistakes
 
@@ -269,6 +332,10 @@ public async Task ProcessAsync_CompletesOrder_WhenPaymentConfirmed()
 
 6. **Unbounded parallelism.** Processing messages as fast as possible without rate limiting. If the consumer processes faster than downstream systems can handle, you'll overwhelm databases or external APIs. Use concurrency limits in your messaging library.
 
-7. **No idempotency.** A message is delivered twice (at-least-once delivery is the norm) and the consumer creates duplicate records. Consumers must be idempotent — check if the work was already done before doing it again.
+7. **No idempotency.** A message is delivered twice (at-least-once delivery is the norm) and the consumer creates duplicate records. Consumers must be idempotent. Strategies: use a unique constraint on a natural key so duplicates are rejected by the database; store processed message IDs in an idempotency table and skip known IDs; use upserts instead of inserts. The right strategy depends on your domain — but "hope it doesn't happen" is never the right one.
 
 8. **Mixing HTTP and background work without clear separation.** A worker service that also exposes a few HTTP endpoints for monitoring, with business logic shared between the API handlers and the workers in an ad-hoc way. If you need both HTTP and background processing, either use a proper API pattern with `IHostedService` for the background work, or keep them as separate deployables.
+
+9. **Blocking host startup in `ExecuteAsync`.** `ExecuteAsync` is called during host startup. If it does synchronous work or a long-running operation before its first `await`, it blocks all subsequent hosted services from starting. The first thing `ExecuteAsync` does should be an `await` — the `PeriodicTimer.WaitForNextTickAsync()` pattern handles this naturally.
+
+10. **Using `Task.Delay` instead of `PeriodicTimer`.** The `while + Task.Delay` loop has two problems: `Task.Delay` throws `OperationCanceledException` on cancellation (requiring extra handling), and it causes timer drift because the delay starts *after* the work completes rather than on a fixed schedule. Use `PeriodicTimer` for fixed-interval work.

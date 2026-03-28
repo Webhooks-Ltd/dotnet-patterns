@@ -15,8 +15,8 @@ Endpoint-focused architecture using .NET Minimal APIs, organised by endpoint cla
 
 ## When NOT to Use
 
-- You need MVC features: model binding from complex sources, output formatters, content negotiation, view rendering
-- Large APIs (50+ endpoints) without a clear organisational strategy — controllers provide natural grouping that Minimal APIs need to create explicitly
+- You need MVC features: custom output formatters, complex content negotiation, view rendering
+- Large APIs (50+ endpoints) without a clear organisational strategy — controllers provide natural grouping that Minimal APIs need to create explicitly via `MapGroup`
 - Teams that are deeply familiar with MVC and have no reason to switch
 - If you're building a Razor Pages or Blazor Server app — those use MVC internally
 
@@ -61,9 +61,11 @@ MyApp/
         │   └── Configurations/
         │       └── OrderConfiguration.cs
         │
-        └── Filters/
-            ├── ValidationFilter.cs
-            └── ExceptionFilter.cs
+        ├── Filters/
+        │   └── ValidationFilter.cs
+        │
+        └── Infrastructure/
+            └── GlobalExceptionHandler.cs
 ```
 
 **Endpoints/** — One class per endpoint, grouped by resource. Each endpoint class has a single static method that handles one HTTP operation. This is the structural replacement for controllers.
@@ -74,7 +76,9 @@ MyApp/
 
 **Data/** — EF Core DbContext and configurations.
 
-**Filters/** — Endpoint filters replace MVC action filters. Validation, exception handling, logging.
+**Filters/** — Endpoint filters replace MVC action filters. Validation, logging, authorization checks.
+
+**Infrastructure/** — Cross-cutting concerns like `IExceptionHandler` implementations, middleware configuration.
 
 ## Dependency Rules
 
@@ -102,83 +106,86 @@ graph TD
 | Route group | plural, lowercase | `/api/orders` |
 | Request DTO | `{Verb}{Entity}Request` | `CreateOrderRequest` |
 | Response DTO | `{Entity}Response` | `OrderResponse` |
-| Filter | `{Concern}Filter` | `ValidationFilter` |
+| Endpoint filter | `{Concern}Filter` | `ValidationFilter` |
+| Exception handler | `{Scope}ExceptionHandler` | `GlobalExceptionHandler` |
 
 ## Key Abstractions
 
-An endpoint class:
+An endpoint class. Use `TypedResults` instead of `Results` — the return type encodes the possible responses, enabling automatic OpenAPI metadata generation without manual `.Produces<T>()` calls:
 
 ```csharp
-// Endpoints/Orders/CreateOrderEndpoint.cs
 public static class CreateOrderEndpoint
 {
-    public static void Map(IEndpointRouteBuilder app)
+    public static void Map(RouteGroupBuilder group)
     {
-        app.MapPost("/api/orders", HandleAsync)
+        group.MapPost("/", HandleAsync)
             .WithName("CreateOrder")
-            .WithTags("Orders")
-            .Produces<OrderResponse>(StatusCodes.Status201Created)
-            .ProducesValidationProblem()
             .AddEndpointFilter<ValidationFilter<CreateOrderRequest>>();
     }
 
-    private static async Task<IResult> HandleAsync(
+    private static async Task<Results<Created<OrderResponse>, ValidationProblem>> HandleAsync(
         CreateOrderRequest request,
         IOrderService orderService,
         CancellationToken ct)
     {
         var order = await orderService.CreateAsync(request, ct);
-        return Results.Created($"/api/orders/{order.Id}", order);
+        return TypedResults.Created($"/api/orders/{order.Id}", order);
     }
 }
 ```
 
-Route group registration in `Program.cs`:
+Registration in `Program.cs` using route groups. Each resource gets a group that owns its prefix, tags, and shared filters — individual endpoints never repeat this configuration:
 
 ```csharp
 var app = builder.Build();
 
-CreateOrderEndpoint.Map(app);
-GetOrderByIdEndpoint.Map(app);
-ListOrdersEndpoint.Map(app);
-UpdateOrderStatusEndpoint.Map(app);
-GetProductByIdEndpoint.Map(app);
-ListProductsEndpoint.Map(app);
+var api = app.MapGroup("/api");
+
+var orders = api.MapGroup("/orders")
+    .WithTags("Orders");
+
+CreateOrderEndpoint.Map(orders);
+GetOrderByIdEndpoint.Map(orders);
+ListOrdersEndpoint.Map(orders);
+UpdateOrderStatusEndpoint.Map(orders);
+
+var products = api.MapGroup("/products")
+    .WithTags("Products");
+
+GetProductByIdEndpoint.Map(products);
+ListProductsEndpoint.Map(products);
 
 app.Run();
 ```
 
-Or use a convention to auto-discover and register:
+For larger projects, extract group registration into extension methods to keep `Program.cs` clean:
 
 ```csharp
-public interface IEndpoint
+public static class OrderEndpoints
 {
-    static abstract void Map(IEndpointRouteBuilder app);
+    public static RouteGroupBuilder MapOrderEndpoints(this IEndpointRouteBuilder app)
+    {
+        var group = app.MapGroup("/orders")
+            .WithTags("Orders");
+
+        CreateOrderEndpoint.Map(group);
+        GetOrderByIdEndpoint.Map(group);
+        ListOrdersEndpoint.Map(group);
+        UpdateOrderStatusEndpoint.Map(group);
+
+        return group;
+    }
 }
 
-// In Program.cs — scan and register all endpoints
-var endpointTypes = typeof(Program).Assembly.GetTypes()
-    .Where(t => t.GetInterfaces().Any(i => i == typeof(IEndpoint)));
-
-foreach (var type in endpointTypes)
-{
-    type.GetMethod("Map")!.Invoke(null, [app]);
-}
+// Program.cs becomes:
+var api = app.MapGroup("/api");
+api.MapOrderEndpoints();
+api.MapProductEndpoints();
 ```
 
-Route groups for shared configuration:
+**Avoid reflection-based auto-discovery.** Patterns that scan assemblies for an `IEndpoint` interface and invoke `Map` via reflection lose compile-time safety, make debugging harder, and hide endpoint registration order. The extension method approach above is explicit, refactor-safe, and costs one line per resource group in `Program.cs`.
 
-```csharp
-var orders = app.MapGroup("/api/orders")
-    .WithTags("Orders")
-    .AddEndpointFilter<ExceptionFilter>();
-
-orders.MapPost("/", CreateOrderEndpoint.HandleAsync);
-orders.MapGet("/{id:guid}", GetOrderByIdEndpoint.HandleAsync);
-orders.MapGet("/", ListOrdersEndpoint.HandleAsync);
-```
-
-Endpoint filter (replaces MVC action filters):
+Endpoint filter (replaces MVC action filters). Note: endpoint filters using constructor injection must be added with `.AddEndpointFilter<T>()` which resolves `T` from DI, or alternatively use the factory overload for inline filters:
 
 ```csharp
 public sealed class ValidationFilter<T>(IValidator<T> validator) : IEndpointFilter
@@ -200,6 +207,26 @@ public sealed class ValidationFilter<T>(IValidator<T> validator) : IEndpointFilt
 }
 ```
 
+For simple cross-cutting concerns, the inline factory overload is often simpler:
+
+```csharp
+group.AddEndpointFilterFactory((factoryContext, next) =>
+{
+    return async (invocationContext) =>
+    {
+        var logger = invocationContext.HttpContext.RequestServices
+            .GetRequiredService<ILogger<Program>>();
+
+        var sw = Stopwatch.StartNew();
+        var result = await next(invocationContext);
+        logger.LogInformation("{Method} completed in {Elapsed}ms",
+            factoryContext.MethodInfo.Name, sw.ElapsedMilliseconds);
+
+        return result;
+    };
+});
+```
+
 ## Data Flow
 
 ```
@@ -215,13 +242,14 @@ IOrderService.CreateAsync(request)
 AppDbContext.SaveChangesAsync()
     │
     ▼
-OrderResponse returned → Results.Created(url, response) → HTTP 201
+OrderResponse returned → TypedResults.Created(url, response) → HTTP 201
 ```
 
 Compared to MVC controllers:
-- No model binding pipeline — parameters are bound directly from route/query/body
+- No model binding pipeline — parameters are bound from route/query/body/form via built-in binding, `[AsParameters]` for grouping, or `IBindableFromHttpContext<T>` for custom binding
 - No action filter chain — endpoint filters are simpler and more explicit
 - No controller base class overhead — endpoint methods are static
+- No automatic content negotiation — responses are always JSON (unless you explicitly return a different `IResult`)
 
 ## Where Business Logic Lives
 
@@ -232,7 +260,25 @@ Endpoints are the HTTP layer. They:
 - Call a service
 - Return an `IResult`
 
-If an endpoint method has more than 5 lines, it's probably doing too much. Business logic belongs in services, not in endpoint handlers.
+If an endpoint method has more than 5–8 lines, it's probably doing too much. Business logic belongs in services, not in endpoint handlers.
+
+When an endpoint needs many route/query/header parameters, group them with `[AsParameters]` instead of listing them individually:
+
+```csharp
+public sealed record ListOrdersParameters(
+    [FromQuery] int Page,
+    [FromQuery] int PageSize,
+    [FromQuery] string? Status,
+    IOrderService OrderService,
+    CancellationToken Ct);
+
+private static async Task<Ok<PagedResult<OrderResponse>>> HandleAsync(
+    [AsParameters] ListOrdersParameters p)
+{
+    var result = await p.OrderService.ListAsync(p.Page, p.PageSize, p.Status, p.Ct);
+    return TypedResults.Ok(result);
+}
+```
 
 ## Testing Strategy
 
@@ -254,10 +300,23 @@ MyApp/
 
 **Unit tests** — test service methods with mocked dependencies. Same as N-Tier.
 
-**Integration tests** — test endpoints with `WebApplicationFactory`. Minimal APIs work seamlessly with `WebApplicationFactory<Program>`:
+**Integration tests** — test endpoints with `WebApplicationFactory`. Minimal APIs work seamlessly with `WebApplicationFactory<Program>`. You must expose the `Program` class — either add `public partial class Program { }` at the bottom of `Program.cs` or add `[assembly: InternalsVisibleTo("MyApp.IntegrationTests")]`:
 
 ```csharp
-public class CreateOrderTests(CustomWebApplicationFactory factory)
+public sealed class CustomWebApplicationFactory : WebApplicationFactory<Program>
+{
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        builder.ConfigureServices(services =>
+        {
+            services.RemoveAll<DbContextOptions<AppDbContext>>();
+            services.AddDbContext<AppDbContext>(options =>
+                options.UseInMemoryDatabase("TestDb"));
+        });
+    }
+}
+
+public sealed class CreateOrderTests(CustomWebApplicationFactory factory)
     : IClassFixture<CustomWebApplicationFactory>
 {
     private readonly HttpClient _client = factory.CreateClient();
@@ -276,6 +335,9 @@ public class CreateOrderTests(CustomWebApplicationFactory factory)
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
         response.Headers.Location.Should().NotBeNull();
+
+        var order = await response.Content.ReadFromJsonAsync<OrderResponse>();
+        order.Should().NotBeNull();
     }
 }
 ```
@@ -286,14 +348,18 @@ public class CreateOrderTests(CustomWebApplicationFactory factory)
 
 2. **Business logic in endpoint handlers.** The handler validates stock, calculates totals, sends emails. Move this to a service. The endpoint handler calls one service method and returns the result.
 
-3. **No route grouping.** Every endpoint repeats `.WithTags("Orders").AddEndpointFilter<ExceptionFilter>()`. Use `MapGroup` to share configuration across related endpoints.
+3. **No route grouping.** Every endpoint repeats `.WithTags("Orders")` and the route prefix. Use `MapGroup` to share configuration across related endpoints — tags, authorization policies, rate limiting, and route prefixes go on the group.
 
-4. **Missing OpenAPI metadata.** Minimal APIs don't auto-generate Swagger schemas like MVC does. Add `.Produces<T>()`, `.WithName()`, `.WithDescription()` to every endpoint or your API documentation will be empty.
+4. **Missing OpenAPI metadata.** Minimal APIs don't auto-generate Swagger schemas like MVC does. The fix is to use `TypedResults` with union return types (`Task<Results<Ok<T>, NotFound>>`) — the framework infers `.Produces<T>()` automatically from the return type. If you use plain `IResult` as the return type, you must add `.Produces<T>()` manually or your API documentation will be empty. Always add `.WithName()` — it's required for link generation and OpenAPI operation IDs.
 
 5. **Injecting too many dependencies into endpoint methods.** An endpoint method with 8 parameters. This signals the endpoint is doing too much. It should take a request DTO and one service.
 
-6. **Not using TypedResults for compile-time safety.** `Results.Ok(dto)` returns `IResult` — the compiler can't check the response type. Use `TypedResults.Ok(dto)` which returns `Ok<T>` and enables `.Produces<T>()` to be inferred.
+6. **Not using TypedResults for compile-time safety.** `Results.Ok(dto)` returns `IResult` — the compiler can't check the response type and OpenAPI metadata can't be inferred. Use `TypedResults.Ok(dto)` which returns `Ok<T>`, and declare the handler return type as `Results<Ok<OrderResponse>, NotFound>` so the framework infers all possible responses for OpenAPI generation. This is not just a best practice — it eliminates an entire class of "my Swagger docs don't match my API" bugs.
 
 7. **Mixing Minimal APIs and Controllers.** Pick one approach for the project. Mixing creates confusion about where to add new endpoints and how filters/middleware are applied. If migrating from MVC, convert all endpoints or none.
 
-8. **No global exception handling.** MVC has middleware and exception filters by default. Minimal APIs need explicit exception handling — either a global `IExceptionHandler`, a `UseExceptionHandler` middleware, or an endpoint filter.
+8. **No global exception handling.** MVC has middleware and exception filters by default. Minimal APIs need explicit exception handling — register `IExceptionHandler` and call `app.UseExceptionHandler()`, or add a `UseStatusCodePages` middleware. Prefer `IExceptionHandler` (.NET 8+) over a catch-all endpoint filter — it runs in the middleware pipeline where it can catch errors from model binding, authorization, and other middleware, not just the handler itself.
+
+9. **Returning `Task<IResult>` when TypedResults are available.** Handler returns `Task<IResult>` with `TypedResults` calls inside. The compiler and OpenAPI generator cannot see the actual response types. Change the return type to `Task<Results<Ok<OrderResponse>, NotFound>>` — the union type makes every possible response explicit.
+
+10. **Not exposing `Program` for integration tests.** `WebApplicationFactory<Program>` needs the `Program` class to be accessible. Add `public partial class Program { }` at the bottom of `Program.cs` or use `InternalsVisibleTo`. Without this, integration tests won't compile.

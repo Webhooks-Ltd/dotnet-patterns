@@ -9,8 +9,9 @@ Independently deployable services, each owning its data and communicating throug
 - **15+ developers** across multiple teams, each needing to deploy independently on their own cadence
 - Distinct bounded contexts with genuinely different scaling requirements (orders: high write volume; product catalogue: high read volume, rare writes)
 - Organisational structure demands service ownership — Conway's Law is in full effect and you're leaning into it
-- You've already built a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) and have evidence that specific modules need independent deployment, scaling, or technology choices
+- You've already built a modular monolith ([STR005](STR005%20-%20modular-monolith.md)) and have evidence that specific modules need independent deployment, scaling, or technology choices. The modular monolith gave you well-defined module boundaries — each module is now a candidate for extraction into a service
 - You can invest in the infrastructure: CI/CD per service, centralised logging, distributed tracing, container orchestration
+- You're extracting incrementally. The ideal path is: monolith → modular monolith ([STR005](STR005%20-%20modular-monolith.md)) → extract modules to services one at a time as justified. This gives you proven boundaries before you pay the distributed systems tax
 
 ## When NOT to Use
 
@@ -22,7 +23,9 @@ Independently deployable services, each owning its data and communicating throug
 
 ## Solution Structure
 
-Use a **mono-repo** for most teams. It simplifies dependency management, cross-service refactoring, and shared CI configuration. Multi-repo is only justified when services are maintained by truly independent organisations.
+Use a **mono-repo** for most teams. It simplifies dependency management, cross-service refactoring, and shared CI configuration. You get atomic commits across services and contracts, making breaking changes visible at PR time rather than in production.
+
+**Multi-repo** is justified when: services are maintained by truly independent organisations, different services have fundamentally different CI/CD pipelines (e.g., one team deploys to Azure, another to AWS), or the mono-repo has grown to a size where build times are untenable despite selective builds. If you go multi-repo, `MyApp.Contracts` must become a versioned NuGet package with a strict backward-compatibility policy.
 
 ```
 MyApp/
@@ -115,6 +118,10 @@ graph TD
     Inventory --> Contracts
     Payments --> Contracts
     Notifications --> Contracts
+    Orders --> SD[MyApp.ServiceDefaults]
+    Inventory --> SD
+    Payments --> SD
+    Notifications --> SD
 ```
 
 Each service owns its own database, references `MyApp.Contracts` and `MyApp.ServiceDefaults`, and **NEVER** references another service's code.
@@ -149,7 +156,7 @@ Shared integration event:
 // Contracts/Events/OrderPlacedEvent.cs
 public sealed record OrderPlacedEvent(
     Guid EventId,
-    DateTime OccurredAt,
+    DateTimeOffset OccurredAt,
     Guid OrderId,
     Guid CustomerId,
     decimal TotalAmount,
@@ -170,11 +177,9 @@ public sealed class Handler(OrdersDbContext db, IPublishEndpoint publisher)
         var order = new Order { /* ... */ };
         db.Orders.Add(order);
 
-        // Use MassTransit's transactional outbox to avoid the dual-write problem.
-        // Without it, a failed Publish after a successful Save loses the event.
         await publisher.Publish(new OrderPlacedEvent(
             Guid.NewGuid(),
-            DateTime.UtcNow,
+            DateTimeOffset.UtcNow,
             order.Id,
             order.CustomerId,
             order.Total,
@@ -182,9 +187,31 @@ public sealed class Handler(OrdersDbContext db, IPublishEndpoint publisher)
                 i.ProductId, i.Quantity, i.UnitPrice)).ToList()),
             ct);
 
+        await db.SaveChangesAsync(ct);
+
         return new PlaceOrderResult(order.Id);
     }
 }
+```
+
+**Transactional outbox setup** — the `Publish` call above doesn't send to the broker immediately. MassTransit's transactional outbox writes the message to the database inside the same transaction as `SaveChangesAsync`. A background delivery service then forwards messages to the broker. This eliminates the dual-write problem (save succeeds, publish fails = lost event). Configure it in `Program.cs`:
+
+```csharp
+builder.Services.AddMassTransit(x =>
+{
+    x.AddConsumers(typeof(Program).Assembly);
+
+    x.AddEntityFrameworkOutbox<OrdersDbContext>(o =>
+    {
+        o.UseSqlServer();
+        o.UseBusOutbox();
+    });
+
+    x.UsingRabbitMq((context, cfg) =>
+    {
+        cfg.ConfigureEndpoints(context);
+    });
+});
 ```
 
 Consuming an event in another service:
@@ -198,13 +225,14 @@ public sealed class OrderPlacedHandler(InventoryDbContext db)
     {
         foreach (var item in context.Message.Items)
         {
-            var product = await db.Products.FindAsync(item.ProductId);
+            var product = await db.Products.FindAsync(
+                [item.ProductId], context.CancellationToken);
             if (product is null) continue;
 
             product.ReserveStock(item.Quantity);
         }
 
-        await db.SaveChangesAsync();
+        await db.SaveChangesAsync(context.CancellationToken);
     }
 }
 ```
@@ -215,21 +243,24 @@ Typed HTTP client for synchronous queries:
 // Services/Orders/Clients/InventoryClient.cs
 public sealed class InventoryClient(HttpClient http)
 {
-    public async Task<ProductAvailabilityDto?> GetAvailabilityAsync(Guid productId)
+    public async Task<ProductAvailabilityDto?> GetAvailabilityAsync(
+        Guid productId, CancellationToken ct = default)
     {
         return await http.GetFromJsonAsync<ProductAvailabilityDto>(
-            $"/api/products/{productId}/availability");
+            $"/api/products/{productId}/availability", ct);
     }
 }
 ```
 
-Registered with resilience:
+Registered with resilience (requires `Microsoft.Extensions.Http.Resilience` package):
 
 ```csharp
 builder.Services.AddHttpClient<InventoryClient>(client =>
     client.BaseAddress = new Uri("https+http://inventory"))
     .AddStandardResilienceHandler();
 ```
+
+The `https+http://inventory` URI uses .NET Aspire's service discovery — `inventory` resolves to whatever the AppHost configured for that resource name. The `https+http` scheme tries HTTPS first and falls back to HTTP. `AddStandardResilienceHandler` adds retries, circuit breaker, and timeout policies from `Microsoft.Extensions.Resilience`.
 
 .NET Aspire orchestration:
 
@@ -244,17 +275,23 @@ var inventoryDb = sql.AddDatabase("inventory-db");
 
 var orders = builder.AddProject<Projects.MyApp_Services_Orders>("orders")
     .WithReference(ordersDb)
-    .WithReference(messaging);
+    .WaitFor(ordersDb)
+    .WithReference(messaging)
+    .WaitFor(messaging);
 
 var inventory = builder.AddProject<Projects.MyApp_Services_Inventory>("inventory")
     .WithReference(inventoryDb)
-    .WithReference(messaging);
+    .WaitFor(inventoryDb)
+    .WithReference(messaging)
+    .WaitFor(messaging);
 
 builder.AddProject<Projects.MyApp_Services_Payments>("payments")
-    .WithReference(messaging);
+    .WithReference(messaging)
+    .WaitFor(messaging);
 
 builder.AddProject<Projects.MyApp_Services_Notifications>("notifications")
-    .WithReference(messaging);
+    .WithReference(messaging)
+    .WaitFor(messaging);
 
 builder.Build().Run();
 ```
@@ -321,7 +358,12 @@ If payment fails:
     PaymentFailedEvent → Inventory releases stock → Orders cancels order
 ```
 
-Use MassTransit's saga state machine or a dedicated orchestrator service for complex multi-step workflows. Don't rely on implicit choreography for workflows that need guaranteed consistency.
+**Choreography vs orchestration:**
+
+- **Choreography** (events only, no central coordinator) works for simple 2–3 step flows. Each service reacts to events and publishes its own. Downside: the workflow is implicit — you can't look at one place to understand the full process. Debugging failures requires reading logs across multiple services.
+- **Orchestration** (a central saga/state machine coordinates the steps) works for workflows with 4+ steps, compensation logic, or timeouts. The saga state machine is the single source of truth for workflow state. Use MassTransit's `MassTransitStateMachine<TState>` for this — it persists saga state to a database and handles retries, timeouts, and compensating events.
+
+**Rule of thumb:** if you need to draw a diagram to explain the workflow, you need an orchestrator. If the compensating actions are non-trivial (reverse a payment, release reserved stock, send a cancellation email), use orchestration — choreography makes compensation paths invisible and error-prone.
 
 ## Where Business Logic Lives
 
@@ -331,6 +373,14 @@ Use MassTransit's saga state machine or a dedicated orchestrator service for com
 - **Cross-service business processes** use sagas or choreography. No service contains rules about another service's domain.
 - **If you find business logic in the gateway, contracts, or shared libraries, you have a problem.** Business logic belongs in the service that owns that domain concept.
 - **Each service picks its own internal pattern.** A simple CRUD notification service might use [STR001](STR001%20-%20n-tier.md). An order processing service with complex rules might use [STR006](STR006%20-%20hexagonal.md). Don't force a single internal architecture across all services.
+
+## API Gateway / BFF
+
+Clients should not call individual services directly. Use an API gateway or Backend-for-Frontend (BFF) pattern to provide a single entry point.
+
+- **YARP (Yet Another Reverse Proxy)** — the .NET-native choice. Configure routing, load balancing, and rate limiting in an ASP.NET Core app. Appropriate when you need custom logic in the gateway (authentication, request aggregation).
+- **BFF per client type** — a mobile BFF, a web BFF, and an admin BFF. Each tailors the API surface and response shape to its client's needs. Prevents the "one API fits all" problem where every client gets too much or too little data.
+- **No business logic in the gateway.** The gateway routes, authenticates, rate-limits, and aggregates. If it's making business decisions, that logic belongs in a service.
 
 ## Testing Strategy
 
@@ -358,7 +408,7 @@ tests/
 
 **Per-service tests:** Each service has its own test project. Unit tests + integration tests follow the service's internal architecture. Use `WebApplicationFactory` per service with Testcontainers for the service's own database.
 
-**Contract tests:** Verify that services honour their published contracts. When the Orders service publishes `OrderPlacedEvent`, the contract test verifies the event schema matches what consumers expect. Use Pact or a custom contract validation approach.
+**Contract tests:** Verify that services honour their published contracts. When the Orders service publishes `OrderPlacedEvent`, the contract test verifies the event schema matches what consumers expect. In a mono-repo this is largely handled by the compiler (shared project reference to `MyApp.Contracts`). In multi-repo, use Pact or serialisation round-trip tests that deserialise a known JSON payload into the event type and verify all fields are populated — this catches breaking changes when the NuGet package version bumps.
 
 **Event handler tests:** Test consumers in isolation — given this event, verify this state change. Mock the database or use Testcontainers.
 
@@ -366,15 +416,26 @@ tests/
 
 ```csharp
 // EndToEnd test example with Aspire
-public class OrderFulfilmentTests(IDistributedApplicationTestingBuilder builder)
+public sealed class OrderFulfilmentTests : IAsyncLifetime
 {
+    private DistributedApplication _app = null!;
+
+    public async Task InitializeAsync()
+    {
+        var builder = await DistributedApplicationTestingBuilder
+            .CreateAsync<Projects.MyApp_AppHost>();
+
+        _app = await builder.BuildAsync();
+        var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5));
+        await _app.StartAsync(cts.Token);
+    }
+
+    public async Task DisposeAsync() => await _app.DisposeAsync();
+
     [Fact]
     public async Task PlaceOrder_ReservesStock_ProcessesPayment_SendsNotification()
     {
-        await using var app = await builder.BuildAsync();
-        await app.StartAsync();
-
-        var ordersClient = app.CreateHttpClient("orders");
+        var ordersClient = _app.CreateHttpClient("orders");
 
         var response = await ordersClient.PostAsJsonAsync("/api/orders", new
         {
@@ -384,15 +445,32 @@ public class OrderFulfilmentTests(IDistributedApplicationTestingBuilder builder)
 
         response.StatusCode.Should().Be(HttpStatusCode.Created);
 
-        // Poll inventory service for eventual consistency
-        var inventoryClient = app.CreateHttpClient("inventory");
-        await Poll.UntilAsync(async () =>
+        var inventoryClient = _app.CreateHttpClient("inventory");
+
+        await WaitForEventualConsistencyAsync(async () =>
         {
             var availability = await inventoryClient
                 .GetFromJsonAsync<ProductAvailabilityDto>(
                     $"/api/products/{seededProductId}/availability");
             return availability!.AvailableStock == initialStock - 2;
         });
+    }
+
+    private static async Task WaitForEventualConsistencyAsync(
+        Func<Task<bool>> condition,
+        TimeSpan? timeout = null,
+        TimeSpan? interval = null)
+    {
+        var deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(30));
+        var delay = interval ?? TimeSpan.FromMilliseconds(500);
+
+        while (DateTime.UtcNow < deadline)
+        {
+            if (await condition()) return;
+            await Task.Delay(delay);
+        }
+
+        throw new TimeoutException("Condition not met within timeout.");
     }
 }
 ```
@@ -418,3 +496,7 @@ public class OrderFulfilmentTests(IDistributedApplicationTestingBuilder builder)
 9. **Ignoring eventual consistency.** Expecting immediate consistency across services. When Orders publishes `OrderPlacedEvent`, the Inventory service might not process it for seconds (or minutes during high load). Design the UI and business logic to handle this — show "processing" states, use read models, and build compensating actions for failures.
 
 10. **No local development story.** Developers need to run 8 services, 3 databases, and a message broker locally. Use .NET Aspire's `AppHost` to orchestrate everything with `dotnet run`. If a developer can't start the full system in one command, adoption will suffer.
+
+11. **Non-idempotent consumers.** Message brokers guarantee at-least-once delivery, not exactly-once. If your `OrderPlacedHandler` reserves stock twice because the message was redelivered, you have a bug. Every consumer must be idempotent — use the `EventId` to deduplicate, or design operations to be naturally idempotent (set stock to X, not decrement by Y).
+
+12. **No event versioning strategy.** You added a field to `OrderPlacedEvent` and broke every consumer. Events are a public contract — they need backward-compatible evolution. Add optional fields with defaults, never remove or rename fields, and consider a schema registry or explicit version numbers (e.g., `OrderPlacedEventV2`) for breaking changes.
